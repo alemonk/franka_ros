@@ -72,6 +72,7 @@ catkin_package(
 )
 
 add_library(franka_example_controllers
+  src/my_controller.cpp
   src/elbow_example_controller.cpp
   src/cartesian_pose_example_controller.cpp
   src/cartesian_velocity_example_controller.cpp
