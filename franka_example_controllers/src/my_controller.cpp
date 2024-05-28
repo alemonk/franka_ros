@@ -22,8 +22,8 @@ bool MyController::init(hardware_interface::RobotHW* robot_hw,
 
   // Subscribe to the "equilibrium_pose" topic to receive pose commands
   sub_equilibrium_pose_ = node_handle.subscribe(
-      "equilibrium_pose", 20, &MyController::equilibriumPoseCallback, this,
-      ros::TransportHints().reliable().tcpNoDelay());
+    "equilibrium_pose", 20, &MyController::equilibriumPoseCallback, this,
+    ros::TransportHints().reliable().tcpNoDelay());
 
   // Retrieve the arm_id parameter from the node handle
   std::string arm_id;
