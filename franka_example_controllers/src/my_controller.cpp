@@ -15,19 +15,24 @@
 namespace franka_example_controllers {
 
 bool MyController::init(hardware_interface::RobotHW* robot_hw,
-                                               ros::NodeHandle& node_handle) {
+                        ros::NodeHandle& node_handle) {
+  // Vectors for stiffness and damping parameters
   std::vector<double> cartesian_stiffness_vector;
   std::vector<double> cartesian_damping_vector;
 
+  // Subscribe to the "equilibrium_pose" topic to receive pose commands
   sub_equilibrium_pose_ = node_handle.subscribe(
       "equilibrium_pose", 20, &MyController::equilibriumPoseCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
 
+  // Retrieve the arm_id parameter from the node handle
   std::string arm_id;
   if (!node_handle.getParam("arm_id", arm_id)) {
     ROS_ERROR_STREAM("MyController: Could not read parameter arm_id");
     return false;
   }
+
+  // Retrieve the joint names parameter and ensure it contains exactly 7 names
   std::vector<std::string> joint_names;
   if (!node_handle.getParam("joint_names", joint_names) || joint_names.size() != 7) {
     ROS_ERROR(
@@ -36,12 +41,14 @@ bool MyController::init(hardware_interface::RobotHW* robot_hw,
     return false;
   }
 
+  // Get the Franka model interface from the hardware
   auto* model_interface = robot_hw->get<franka_hw::FrankaModelInterface>();
   if (model_interface == nullptr) {
-    ROS_ERROR_STREAM(
-        "MyController: Error getting model interface from hardware");
+    ROS_ERROR_STREAM("MyController: Error getting model interface from hardware");
     return false;
   }
+
+  // Initialize the model handle
   try {
     model_handle_ = std::make_unique<franka_hw::FrankaModelHandle>(
         model_interface->getHandle(arm_id + "_model"));
@@ -52,12 +59,14 @@ bool MyController::init(hardware_interface::RobotHW* robot_hw,
     return false;
   }
 
+  // Get the Franka state interface from the hardware
   auto* state_interface = robot_hw->get<franka_hw::FrankaStateInterface>();
   if (state_interface == nullptr) {
-    ROS_ERROR_STREAM(
-        "MyController: Error getting state interface from hardware");
+    ROS_ERROR_STREAM("MyController: Error getting state interface from hardware");
     return false;
   }
+
+  // Initialize the state handle
   try {
     state_handle_ = std::make_unique<franka_hw::FrankaStateHandle>(
         state_interface->getHandle(arm_id + "_robot"));
@@ -68,40 +77,44 @@ bool MyController::init(hardware_interface::RobotHW* robot_hw,
     return false;
   }
 
+  // Get the effort joint interface from the hardware
   auto* effort_joint_interface = robot_hw->get<hardware_interface::EffortJointInterface>();
   if (effort_joint_interface == nullptr) {
-    ROS_ERROR_STREAM(
-        "MyController: Error getting effort joint interface from hardware");
+    ROS_ERROR_STREAM("MyController: Error getting effort joint interface from hardware");
     return false;
   }
+
+  // Initialize the joint handles for all 7 joints
   for (size_t i = 0; i < 7; ++i) {
     try {
       joint_handles_.push_back(effort_joint_interface->getHandle(joint_names[i]));
     } catch (const hardware_interface::HardwareInterfaceException& ex) {
-      ROS_ERROR_STREAM(
-          "MyController: Exception getting joint handles: " << ex.what());
+      ROS_ERROR_STREAM("MyController: Exception getting joint handles: " << ex.what());
       return false;
     }
   }
 
+  // Set up the dynamic reconfigure server for compliance parameters
   dynamic_reconfigure_compliance_param_node_ =
       ros::NodeHandle(node_handle.getNamespace() + "/dynamic_reconfigure_compliance_param_node");
 
   dynamic_server_compliance_param_ = std::make_unique<
       dynamic_reconfigure::Server<franka_example_controllers::compliance_paramConfig>>(
-
       dynamic_reconfigure_compliance_param_node_);
   dynamic_server_compliance_param_->setCallback(
       boost::bind(&MyController::complianceParamCallback, this, _1, _2));
 
+  // Initialize desired position and orientation to zero (identity quaternion)
   position_d_.setZero();
   orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
   position_d_target_.setZero();
   orientation_d_target_.coeffs() << 0.0, 0.0, 0.0, 1.0;
 
+  // Initialize stiffness and damping matrices to zero
   cartesian_stiffness_.setZero();
   cartesian_damping_.setZero();
 
+  // Return true to indicate successful initialization
   return true;
 }
 
@@ -202,40 +215,65 @@ void MyController::update(const ros::Time& /*time*/,
 Eigen::Matrix<double, 7, 1> MyController::saturateTorqueRate(
     const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
     const Eigen::Matrix<double, 7, 1>& tau_J_d) {  // NOLINT (readability-identifier-naming)
+  // Initialize the saturated torque vector
   Eigen::Matrix<double, 7, 1> tau_d_saturated{};
+
+  // Iterate through each torque component
   for (size_t i = 0; i < 7; i++) {
+    // Calculate the difference between the calculated torque and the joint torque
     double difference = tau_d_calculated[i] - tau_J_d[i];
+    // Saturate the torque difference within a specified range
     tau_d_saturated[i] =
         tau_J_d[i] + std::max(std::min(difference, delta_tau_max_), -delta_tau_max_);
   }
+
+  // Return the saturated torque vector
   return tau_d_saturated;
 }
 
-void MyController::complianceParamCallback(
-    franka_example_controllers::compliance_paramConfig& config,
-    uint32_t /*level*/) {
+void MyController::complianceParamCallback(franka_example_controllers::compliance_paramConfig& config, uint32_t /*level*/) {
+  // Set the target Cartesian stiffness matrix
   cartesian_stiffness_target_.setIdentity();
+  // Set translational stiffness using the provided config
   cartesian_stiffness_target_.topLeftCorner(3, 3)
       << config.translational_stiffness * Eigen::Matrix3d::Identity();
+  // Set rotational stiffness using the provided config
   cartesian_stiffness_target_.bottomRightCorner(3, 3)
       << config.rotational_stiffness * Eigen::Matrix3d::Identity();
+
+  // Set the target Cartesian damping matrix
   cartesian_damping_target_.setIdentity();
   // Damping ratio = 1
+  // Set translational damping using the provided config
   cartesian_damping_target_.topLeftCorner(3, 3)
       << 2.0 * sqrt(config.translational_stiffness) * Eigen::Matrix3d::Identity();
+  // Set rotational damping using the provided config
   cartesian_damping_target_.bottomRightCorner(3, 3)
       << 2.0 * sqrt(config.rotational_stiffness) * Eigen::Matrix3d::Identity();
+
+  // Set the target nullspace stiffness
   nullspace_stiffness_target_ = config.nullspace_stiffness;
 }
 
 void MyController::equilibriumPoseCallback(
     const geometry_msgs::PoseStampedConstPtr& msg) {
+  // Lock the mutex to ensure thread safety while updating the target position and orientation.
   std::lock_guard<std::mutex> position_d_target_mutex_lock(
       position_and_orientation_d_target_mutex_);
+
+  // Update the target position of the end effector to the values received in the message.
   position_d_target_ << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
+
+  // Store the current target orientation before updating it.
   Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
+
+  // Update the target orientation of the end effector to the values received in the message.
   orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
       msg->pose.orientation.z, msg->pose.orientation.w;
+
+  // Ensure continuity in the quaternion representation by checking if the dot product
+  // between the old and new orientation is negative. If it is, negate the new orientation
+  // coefficients to keep the orientation in the same hemisphere.
   if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
     orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
   }
