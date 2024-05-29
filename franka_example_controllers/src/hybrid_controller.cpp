@@ -83,27 +83,25 @@ bool HybridController::init(hardware_interface::RobotHW* robot_hardware,
 }
 
 void HybridController::equilibriumPoseCallback(const geometry_msgs::PoseStampedConstPtr& msg) {
-  ROS_INFO_STREAM("pose: " << msg->pose);
+  // ROS_INFO_STREAM("Received pose: " << msg->pose);
   // Lock the mutex to ensure thread safety while updating the target position and orientation.
-  std::lock_guard<std::mutex> position_d_target_mutex_lock(
-      position_and_orientation_d_target_mutex_);
-
-  // Update the target position of the end effector to the values received in the message.
-  position_d_target_ << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
-
-  // Store the current target orientation before updating it.
+  std::lock_guard<std::mutex> position_d_target_mutex_lock(position_and_orientation_d_target_mutex_);
   Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
 
-  // Update the target orientation of the end effector to the values received in the message.
-  orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
-      msg->pose.orientation.z, msg->pose.orientation.w;
+  position_d_target_ << msg->pose.position.x,
+                        msg->pose.position.y,
+                        msg->pose.position.z;
 
-  // Ensure continuity in the quaternion representation by checking if the dot product
-  // between the old and new orientation is negative. If it is, negate the new orientation
-  // coefficients to keep the orientation in the same hemisphere.
+  orientation_d_target_.coeffs() << msg->pose.orientation.x, 
+                                    msg->pose.orientation.y,
+                                    msg->pose.orientation.z, 
+                                    msg->pose.orientation.w;
+
   if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
     orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
   }
+
+  desired_pose_msg = *msg;
 }
 
 void HybridController::starting(const ros::Time& /* time */) {
@@ -111,17 +109,21 @@ void HybridController::starting(const ros::Time& /* time */) {
   elapsed_time_ = ros::Duration(0.0);
 }
 
-void HybridController::update(const ros::Time& /* time */,
-                                            const ros::Duration& period) {
+void HybridController::update(const ros::Time& /* time */, const ros::Duration& period) {
   elapsed_time_ += period;
 
-  double radius = 0.15;
-  double angle = M_PI / 4 * (1 - std::cos(M_PI / 5.0 * elapsed_time_.toSec()));
-  double delta_x = radius * std::sin(angle);
-  double delta_z = radius * (std::cos(angle) - 1);
+  // Get the latest target position and orientation from the message
   std::array<double, 16> new_pose = initial_pose_;
-  new_pose[12] -= delta_x;
-  new_pose[14] -= delta_z;
+
+  std::lock_guard<std::mutex> position_d_target_mutex_lock(position_and_orientation_d_target_mutex_);
+  float err_x = new_pose[12] - desired_pose_msg.pose.position.x;
+  float err_y = new_pose[13] - desired_pose_msg.pose.position.y;
+  float err_z = new_pose[14] - desired_pose_msg.pose.position.z;
+
+  new_pose[12] -= err_x / 10000.0;
+  new_pose[13] -= err_y / 10000.0;
+  new_pose[14] -= err_z / 10000.0;
+
   cartesian_pose_handle_->setCommand(new_pose);
 }
 

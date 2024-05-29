@@ -8,6 +8,7 @@
 
 #include <controller_interface/multi_interface_controller.h>
 #include <franka_hw/franka_state_interface.h>
+#include <franka_hw/franka_model_interface.h>
 #include <hardware_interface/robot_hw.h>
 #include <ros/node_handle.h>
 #include <ros/time.h>
@@ -42,6 +43,7 @@ class HybridController
   Eigen::Quaterniond orientation_d_target_;
 
   // Equilibrium pose subscriber
+  geometry_msgs::PoseStamped desired_pose_msg;
   ros::Subscriber sub_equilibrium_pose_;
   void equilibriumPoseCallback(const geometry_msgs::PoseStampedConstPtr& msg);
 };

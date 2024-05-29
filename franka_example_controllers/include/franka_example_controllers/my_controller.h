@@ -30,11 +30,8 @@ class MyController : public controller_interface::MultiInterfaceController<
                                                 hardware_interface::EffortJointInterface,
                                                 franka_hw::FrankaStateInterface> {
  public:
-  // Function to initialize the controller.
   bool init(hardware_interface::RobotHW* robot_hw, ros::NodeHandle& node_handle) override;
-  // Function called when the controller starts.
   void starting(const ros::Time&) override;
-  // Function called periodically to update the controller.
   void update(const ros::Time&, const ros::Duration& period) override;
 
  private:
