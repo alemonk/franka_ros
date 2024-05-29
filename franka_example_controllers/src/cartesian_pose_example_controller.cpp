@@ -6,6 +6,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <iostream>
 
 #include <controller_interface/controller_base.h>
 #include <franka_hw/franka_cartesian_command_interface.h>
@@ -84,6 +85,12 @@ void CartesianPoseExampleController::update(const ros::Time& /* time */,
   std::array<double, 16> new_pose = initial_pose_;
   new_pose[12] -= delta_x;
   new_pose[14] -= delta_z;
+
+  std::cout << "delta_x: " << delta_x << std::endl;
+  std::cout << "delta_z: " << delta_z << std::endl;
+  ROS_INFO("delta_x: %f", delta_x);
+  ROS_INFO("delta_z: %f", delta_z);
+  
   cartesian_pose_handle_->setCommand(new_pose);
 }
 
