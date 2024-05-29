@@ -53,7 +53,8 @@ class MyController : public controller_interface::MultiInterfaceController<
   double filter_params_{0.005};
   double nullspace_stiffness_{20.0};
   double nullspace_stiffness_target_{20.0};
-  const double delta_tau_max_{1.0};
+  const double delta_tau_max_{0.2};
+
   // Matrices for controlling Cartesian stiffness and damping.
   Eigen::Matrix<double, 6, 6> cartesian_stiffness_;
   Eigen::Matrix<double, 6, 6> cartesian_stiffness_target_;
