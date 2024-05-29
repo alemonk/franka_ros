@@ -51,9 +51,9 @@ class MyController : public controller_interface::MultiInterfaceController<
 
   // Parameters for filtering and controlling the nullspace stiffness.
   double filter_params_{0.005};
-  double nullspace_stiffness_{20.0};
-  double nullspace_stiffness_target_{20.0};
-  const double delta_tau_max_{0.2};
+  double nullspace_stiffness_{50.0};
+  double nullspace_stiffness_target_{50.0};
+  const double delta_tau_max_{0.1};
 
   // Matrices for controlling Cartesian stiffness and damping.
   Eigen::Matrix<double, 6, 6> cartesian_stiffness_;

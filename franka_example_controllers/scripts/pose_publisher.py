@@ -7,7 +7,9 @@ import time
 
 def publish_pose():
     rospy.init_node('pose_publisher', anonymous=True)
-    pose_pub = rospy.Publisher('/my_controller/equilibrium_pose', PoseStamped, queue_size=10)
+    # pose_pub = rospy.Publisher('/my_controller/equilibrium_pose', PoseStamped, queue_size=10)
+    pose_pub = rospy.Publisher('/cartesian_pose_example_controller/equilibrium_pose', PoseStamped, queue_size=10)
+
     rate = rospy.Rate(10)  # 10 Hz
 
     while not rospy.is_shutdown():
@@ -19,8 +21,8 @@ def publish_pose():
         pose.header.frame_id = "panda_link0"  # Change if necessary
 
         # Set the desired position
-        pose.pose.position.x = 0.75
-        pose.pose.position.y = 0.25
+        pose.pose.position.x = 0.5
+        pose.pose.position.y = 0.1
         pose.pose.position.z = 0.2
         # Set the desired orientation (quaternion)
         pose.pose.orientation.x = 1.0
@@ -33,8 +35,8 @@ def publish_pose():
         time.sleep(5)
 
         # Set the desired position
-        pose.pose.position.x = 0.75
-        pose.pose.position.y = -0.25
+        pose.pose.position.x = 0.5
+        pose.pose.position.y = -0.1
         pose.pose.position.z = 0.2
         # Set the desired orientation (quaternion)
         pose.pose.orientation.x = 1.0
@@ -47,8 +49,8 @@ def publish_pose():
         time.sleep(5)
 
         # Set the desired position
-        pose.pose.position.x = 0.25
-        pose.pose.position.y = -0.25
+        pose.pose.position.x = 0.4
+        pose.pose.position.y = -0.1
         pose.pose.position.z = 0.2
         # Set the desired orientation (quaternion)
         pose.pose.orientation.x = 1.0
@@ -61,8 +63,8 @@ def publish_pose():
         time.sleep(5)
 
         # Set the desired position
-        pose.pose.position.x = 0.25
-        pose.pose.position.y = 0.25
+        pose.pose.position.x = 0.4
+        pose.pose.position.y = 0.1
         pose.pose.position.z = 0.2
         # Set the desired orientation (quaternion)
         pose.pose.orientation.x = 1.0

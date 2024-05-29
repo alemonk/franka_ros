@@ -195,21 +195,20 @@ void MyController::update(const ros::Time& /*time*/,
   // Desired torque
   tau_d << tau_task + tau_nullspace + coriolis;
 
-  ROS_INFO_STREAM("cartesian stiffness: " << cartesian_stiffness_);
-  ROS_INFO_STREAM("cartesian damping: " << cartesian_damping_);
-  ROS_INFO_STREAM("tau_task: " << tau_task.transpose());
-  ROS_INFO_STREAM("tau_nullspace: " << tau_nullspace.transpose());
-  ROS_INFO_STREAM("coriolis: " << coriolis.transpose());
-  ROS_INFO_STREAM("tau_d before saturation: " << tau_d.transpose());
-
   // Saturate torque rate to avoid discontinuities
   tau_d << saturateTorqueRate(tau_d, tau_J_d);
   for (size_t i = 0; i < 7; ++i) {
     joint_handles_[i].setCommand(tau_d(i));
   }
 
-  ROS_INFO_STREAM("tau_d after saturation: " << tau_d.transpose());
-
+/*
+  ROS_INFO_STREAM("cartesian stiffness: " << cartesian_stiffness_);
+  ROS_INFO_STREAM("cartesian damping: " << cartesian_damping_);
+  ROS_INFO_STREAM("tau_task: " << tau_task.transpose());
+  ROS_INFO_STREAM("tau_nullspace: " << tau_nullspace.transpose());
+  ROS_INFO_STREAM("coriolis: " << coriolis.transpose());
+  ROS_INFO_STREAM("tau_d before saturation: " << tau_d.transpose());
+*/
   // update parameters changed online either through dynamic reconfigure or through the interactive
   // target by filtering
   cartesian_stiffness_ =
