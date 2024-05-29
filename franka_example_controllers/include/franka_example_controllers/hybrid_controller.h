@@ -31,13 +31,10 @@ class HybridController
  private:
   franka_hw::FrankaPoseCartesianInterface* cartesian_pose_interface_;
   std::unique_ptr<franka_hw::FrankaCartesianPoseHandle> cartesian_pose_handle_;
-  ros::Duration elapsed_time_;
   std::array<double, 16> initial_pose_{};
 
   // Desired nullspace equilibrium configuration and target position and orientation.
   Eigen::Matrix<double, 7, 1> q_d_nullspace_;
-  Eigen::Vector3d position_d_;
-  Eigen::Quaterniond orientation_d_;
   std::mutex position_and_orientation_d_target_mutex_;
   Eigen::Vector3d position_d_target_;
   Eigen::Quaterniond orientation_d_target_;

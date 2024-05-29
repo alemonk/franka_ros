@@ -1,0 +1,7 @@
+{
+    "C_Cpp.errorSquiggles": "disabled",
+    "files.associations": {
+        "__node_handle": "cpp"
+    },
+    "cmake.sourceDirectory": "/Users/alemonk/Library/Mobile Documents/com~apple~CloudDocs/MSc THESIS/franka_ros/franka_example_controllers"
+}

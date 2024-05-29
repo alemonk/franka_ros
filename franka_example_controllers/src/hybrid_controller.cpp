@@ -68,9 +68,6 @@ bool HybridController::init(hardware_interface::RobotHW* robot_hardware,
     return false;
   }
 
-  // Initialize desired position and orientation to zero (identity quaternion)
-  position_d_.setZero();
-  orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
   position_d_target_.setZero();
   orientation_d_target_.coeffs() << 0.0, 0.0, 0.0, 1.0;
 
@@ -106,28 +103,29 @@ void HybridController::equilibriumPoseCallback(const geometry_msgs::PoseStampedC
 
 void HybridController::starting(const ros::Time& /* time */) {
   initial_pose_ = cartesian_pose_handle_->getRobotState().O_T_EE_d;
-  elapsed_time_ = ros::Duration(0.0);
 }
 
-void HybridController::update(const ros::Time& /* time */, const ros::Duration& period) {
-  elapsed_time_ += period;
-
-  // Get the latest target position and orientation from the message
+void HybridController::update(const ros::Time& /* time */, const ros::Duration& /* period */) {
   std::array<double, 16> new_pose = initial_pose_;
 
-  std::lock_guard<std::mutex> position_d_target_mutex_lock(position_and_orientation_d_target_mutex_);
-  float err_x = new_pose[12] - desired_pose_msg.pose.position.x;
-  float err_y = new_pose[13] - desired_pose_msg.pose.position.y;
-  float err_z = new_pose[14] - desired_pose_msg.pose.position.z;
+  const double position_gain = 0.0001;
 
-  new_pose[12] -= err_x / 10000.0;
-  new_pose[13] -= err_y / 10000.0;
-  new_pose[14] -= err_z / 10000.0;
+  std::lock_guard<std::mutex> position_d_target_mutex_lock(position_and_orientation_d_target_mutex_);
+  Eigen::Vector3d current_position(new_pose[12], new_pose[13], new_pose[14]);
+  Eigen::Vector3d desired_position(desired_pose_msg.pose.position.x, 
+                                   desired_pose_msg.pose.position.y, 
+                                   desired_pose_msg.pose.position.z);
+
+  Eigen::Vector3d position_error = desired_position - current_position;
+  current_position += position_gain * position_error;
+
+  new_pose[12] = current_position.x();
+  new_pose[13] = current_position.y();
+  new_pose[14] = current_position.z();
 
   cartesian_pose_handle_->setCommand(new_pose);
 }
 
 }  // namespace franka_example_controllers
 
-PLUGINLIB_EXPORT_CLASS(franka_example_controllers::HybridController,
-                       controller_interface::ControllerBase)
+PLUGINLIB_EXPORT_CLASS(franka_example_controllers::HybridController, controller_interface::ControllerBase)
