@@ -6,6 +6,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <algorithm>
 
 #include <controller_interface/controller_base.h>
 #include <franka/robot_state.h>
@@ -80,25 +81,22 @@ bool HybridController::init(hardware_interface::RobotHW* robot_hardware,
 }
 
 void HybridController::equilibriumPoseCallback(const geometry_msgs::PoseStampedConstPtr& msg) {
-  // ROS_INFO_STREAM("Received pose: " << msg->pose);
-  // Lock the mutex to ensure thread safety while updating the target position and orientation.
-  std::lock_guard<std::mutex> position_d_target_mutex_lock(position_and_orientation_d_target_mutex_);
-  Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
-
-  position_d_target_ << msg->pose.position.x,
-                        msg->pose.position.y,
-                        msg->pose.position.z;
-
-  orientation_d_target_.coeffs() << msg->pose.orientation.x, 
-                                    msg->pose.orientation.y,
-                                    msg->pose.orientation.z, 
-                                    msg->pose.orientation.w;
-
-  if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
-    orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
-  }
-
+  ROS_INFO("NEW MESSAGE RECEIVED");
   desired_pose_msg = *msg;
+}
+
+Eigen::Vector3d saturateError(const Eigen::Vector3d& error, double max_error) {
+  Eigen::Vector3d saturated_error;
+  for (int i = 0; i < 3; ++i) {
+    if (error[i] > max_error) {
+      saturated_error[i] = max_error;
+    } else if (error[i] < -max_error) {
+      saturated_error[i] = -max_error;
+    } else {
+      saturated_error[i] = error[i];
+    }
+  }
+  return saturated_error;
 }
 
 void HybridController::starting(const ros::Time& /* time */) {
@@ -108,7 +106,8 @@ void HybridController::starting(const ros::Time& /* time */) {
 void HybridController::update(const ros::Time& /* time */, const ros::Duration& /* period */) {
   std::array<double, 16> new_pose = initial_pose_;
 
-  const double position_gain = 0.0001;
+  const double position_gain = 1;
+  const double max_position_error = 0.00001;
 
   std::lock_guard<std::mutex> position_d_target_mutex_lock(position_and_orientation_d_target_mutex_);
   Eigen::Vector3d current_position(new_pose[12], new_pose[13], new_pose[14]);
@@ -117,11 +116,13 @@ void HybridController::update(const ros::Time& /* time */, const ros::Duration& 
                                    desired_pose_msg.pose.position.z);
 
   Eigen::Vector3d position_error = desired_position - current_position;
-  current_position += position_gain * position_error;
+  position_error = position_gain * position_error;
+  position_error = saturateError(position_error, max_position_error);
 
-  new_pose[12] = current_position.x();
-  new_pose[13] = current_position.y();
-  new_pose[14] = current_position.z();
+  // ROS_INFO("position_error: %f", position_error.x());
+  new_pose[12] = current_position.x() + position_error.x();
+  new_pose[13] = current_position.y() + position_error.y();
+  new_pose[14] = current_position.z() + position_error.z();
 
   cartesian_pose_handle_->setCommand(new_pose);
 }

@@ -7,8 +7,8 @@ import time
 
 def publish_pose():
     rospy.init_node('pose_publisher', anonymous=True)
-    # pose_pub = rospy.Publisher('/my_controller/equilibrium_pose', PoseStamped, queue_size=10)
-    pose_pub = rospy.Publisher('/hybrid_controller/equilibrium_pose', PoseStamped, queue_size=10)
+    # pose_pub = rospy.Publisher('/my_controller/waypoint', PoseStamped, queue_size=10)
+    pose_pub = rospy.Publisher('/hybrid_controller/waypoint', PoseStamped, queue_size=10)
     pose = PoseStamped()
 
     # Fill in the header
