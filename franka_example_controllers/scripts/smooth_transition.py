@@ -66,11 +66,10 @@ class SmoothTransition:
                 break
 
             t = elapsed_time / transition_time
+            smooth_t = self.smooth_step(t)
 
-            # Linear interpolation for position
-            interp_pos = (1 - t) * start_pos + t * target_pos
-            # Spherical linear interpolation for orientation (quaternion)
-            interp_ori = self.slerp(start_ori, target_ori, t)
+            interp_pos = (1 - smooth_t) * start_pos + smooth_t * target_pos
+            interp_ori = self.slerp(start_ori, target_ori, smooth_t)
 
             equilibrium_pose = PoseStamped()
             equilibrium_pose.header = Header()
@@ -86,6 +85,10 @@ class SmoothTransition:
 
             self.equilibrium_pub.publish(equilibrium_pose)
             self.rate.sleep()
+
+    def smooth_step(self, t):
+        """Smooth step function based on arctan."""
+        return 0.5 * (1 + np.arctan(10 * (t - 0.5)) / np.pi)
 
     def slerp(self, start, target, t):
         """Spherical linear interpolation of quaternions."""

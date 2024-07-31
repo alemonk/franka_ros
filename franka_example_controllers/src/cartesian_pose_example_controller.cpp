@@ -86,8 +86,6 @@ void CartesianPoseExampleController::update(const ros::Time& /* time */,
   new_pose[12] -= delta_x;
   new_pose[14] -= delta_z;
 
-  std::cout << "delta_x: " << delta_x << std::endl;
-  std::cout << "delta_z: " << delta_z << std::endl;
   ROS_INFO("delta_x: %f", delta_x);
   ROS_INFO("delta_z: %f", delta_z);
   
