@@ -9,6 +9,7 @@
 #include <franka/robot_state.h>
 #include <pluginlib/class_list_macros.h>
 #include <ros/ros.h>
+#include <geometry_msgs/WrenchStamped.h>
 
 #include <franka_example_controllers/pseudo_inversion.h>
 
@@ -23,6 +24,10 @@ bool CartesianImpedanceExampleController::init(hardware_interface::RobotHW* robo
       "equilibrium_pose", 20, &CartesianImpedanceExampleController::equilibriumPoseCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
 
+  wrench_subscriber_ = node_handle.subscribe(
+      "/franka_state_controller/F_ext", 10, &CartesianImpedanceExampleController::wrenchCallback, this,
+      ros::TransportHints().reliable().tcpNoDelay());
+  
   std::string arm_id;
   if (!node_handle.getParam("arm_id", arm_id)) {
     ROS_ERROR_STREAM("CartesianImpedanceExampleController: Could not read parameter arm_id");
@@ -239,6 +244,12 @@ void CartesianImpedanceExampleController::equilibriumPoseCallback(
   if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
     orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
   }
+}
+
+void CartesianImpedanceExampleController::wrenchCallback(
+    const geometry_msgs::WrenchStamped::ConstPtr& msg) {
+  double force_z = msg->wrench.force.z;
+  ROS_INFO("Force on Z-axis: %f", force_z);
 }
 
 }  // namespace franka_example_controllers
