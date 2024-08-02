@@ -45,7 +45,7 @@ class CartesianImpedanceExampleController : public controller_interface::MultiIn
   double filter_params_{0.005};
   double nullspace_stiffness_{20.0};
   double nullspace_stiffness_target_{20.0};
-  const double delta_tau_max_{1.0};
+  const double delta_tau_max_{0.1};
   Eigen::Matrix<double, 6, 6> cartesian_stiffness_;
   Eigen::Matrix<double, 6, 6> cartesian_stiffness_target_;
   Eigen::Matrix<double, 6, 6> cartesian_damping_;
@@ -56,6 +56,17 @@ class CartesianImpedanceExampleController : public controller_interface::MultiIn
   std::mutex position_and_orientation_d_target_mutex_;
   Eigen::Vector3d position_d_target_;
   Eigen::Quaterniond orientation_d_target_;
+
+  // Hybrid controller
+  ros::Time last_update_time_;
+  double previous_force_err_z_;
+  double force_err_derivative_;
+  double force_integral_;
+  double target_force_z_;
+  double force_z_;
+  double force_control_gain_p_;
+  double force_control_gain_i_;
+  double force_control_gain_d_;
 
   // Dynamic reconfigure
   std::unique_ptr<dynamic_reconfigure::Server<franka_example_controllers::compliance_paramConfig>>
@@ -69,6 +80,8 @@ class CartesianImpedanceExampleController : public controller_interface::MultiIn
   ros::Subscriber wrench_subscriber_;
   void equilibriumPoseCallback(const geometry_msgs::PoseStampedConstPtr& msg);
   void wrenchCallback(const geometry_msgs::WrenchStamped::ConstPtr& msg);
+
+  bool waypoint_;
 
 };
 

@@ -27,7 +27,7 @@ bool CartesianImpedanceExampleController::init(hardware_interface::RobotHW* robo
   wrench_subscriber_ = node_handle.subscribe(
       "/franka_state_controller/F_ext", 10, &CartesianImpedanceExampleController::wrenchCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
-  
+
   std::string arm_id;
   if (!node_handle.getParam("arm_id", arm_id)) {
     ROS_ERROR_STREAM("CartesianImpedanceExampleController: Could not read parameter arm_id");
@@ -107,10 +107,13 @@ bool CartesianImpedanceExampleController::init(hardware_interface::RobotHW* robo
   cartesian_stiffness_.setZero();
   cartesian_damping_.setZero();
 
+  target_force_z_ = 3.0; // N
+  waypoint_ = false;
+
   return true;
 }
 
-void CartesianImpedanceExampleController::starting(const ros::Time& /*time*/) {
+void CartesianImpedanceExampleController::starting(const ros::Time& time) {
   // compute initial velocity with jacobian and set x_attractor and q_d_nullspace
   // to initial configuration
   franka::RobotState initial_state = state_handle_->getRobotState();
@@ -126,12 +129,19 @@ void CartesianImpedanceExampleController::starting(const ros::Time& /*time*/) {
   orientation_d_ = Eigen::Quaterniond(initial_transform.rotation());
   position_d_target_ = initial_transform.translation();
   orientation_d_target_ = Eigen::Quaterniond(initial_transform.rotation());
+  force_z_ = 0.0;
+  force_integral_ = 0.0;
+  last_update_time_ = time;
+
+  force_control_gain_p_ = 0.0001;
+  force_control_gain_i_ = 0.0005;
+  force_control_gain_d_ = 0.0;
 
   // set nullspace equilibrium configuration to initial q
   q_d_nullspace_ = q_initial;
 }
 
-void CartesianImpedanceExampleController::update(const ros::Time& /*time*/,
+void CartesianImpedanceExampleController::update(const ros::Time& time,
                                                  const ros::Duration& /*period*/) {
   // get state variables
   franka::RobotState robot_state = state_handle_->getRobotState();
@@ -150,10 +160,31 @@ void CartesianImpedanceExampleController::update(const ros::Time& /*time*/,
   Eigen::Vector3d position(transform.translation());
   Eigen::Quaterniond orientation(transform.rotation());
 
+  // Transform the force to the end effector frame
+  Eigen::Vector3d force_ee(transform.linear().transpose() * Eigen::Vector3d(0.0, 0.0, force_z_));
+  double force_err_z = target_force_z_ - force_ee.z();
+
+  // Compute the time difference
+  double dt = (time - last_update_time_).toSec();
+  last_update_time_ = time;
+
+  // Update the integral of the force error
+  force_integral_ += force_err_z * dt;
+
+  // Compute the derivative of the force error
+  force_err_derivative_ = (force_err_z - previous_force_err_z_) / dt;
+  previous_force_err_z_ = force_err_z;
+
+  // Compute the desired position adjustment using a PID controller
+  double position_adjustment_z = force_control_gain_p_ * force_err_z + 
+                                 force_control_gain_i_ * force_integral_ + 
+                                 force_control_gain_d_ * force_err_derivative_;
+
   // compute error to desired pose
   // position error
   Eigen::Matrix<double, 6, 1> error;
   error.head(3) << position - position_d_;
+  double distance_error = sqrt(error(0)*error(0) + error(1)*error(1) + error(2)*error(2));
 
   // orientation error
   if (orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0) {
@@ -164,6 +195,18 @@ void CartesianImpedanceExampleController::update(const ros::Time& /*time*/,
   error.tail(3) << error_quaternion.x(), error_quaternion.y(), error_quaternion.z();
   // Transform to base frame
   error.tail(3) << -transform.rotation() * error.tail(3);
+
+  // Activate force controller when the positional error in Z-direction is 'close enough'
+  if ((distance_error < 0.05) && (waypoint_ == true)) {
+    position_d_(2) = -1 * position_adjustment_z;
+    ROS_INFO_STREAM("Position adjustment Z: " << position_adjustment_z);
+    ROS_INFO_STREAM("Force error: " << force_err_z);
+    // ROS_INFO_STREAM("Force integral: " << force_integral_);
+    // ROS_INFO_STREAM("Force error derivative: " << force_err_derivative_);
+    // ROS_INFO_STREAM("Position error: " << error.head(3).transpose());
+    // ROS_INFO_STREAM("Orientation error: " << error.tail(3).transpose());
+    ROS_INFO_STREAM("..................................");
+  }
 
   // compute control
   // allocate variables
@@ -233,23 +276,25 @@ void CartesianImpedanceExampleController::complianceParamCallback(
   nullspace_stiffness_target_ = config.nullspace_stiffness;
 }
 
-void CartesianImpedanceExampleController::equilibriumPoseCallback(
-    const geometry_msgs::PoseStampedConstPtr& msg) {
-  std::lock_guard<std::mutex> position_d_target_mutex_lock(
-      position_and_orientation_d_target_mutex_);
+void CartesianImpedanceExampleController::equilibriumPoseCallback(const geometry_msgs::PoseStampedConstPtr& msg) 
+{
+  std::lock_guard<std::mutex> position_d_target_mutex_lock(position_and_orientation_d_target_mutex_);
   position_d_target_ << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
   Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
-  orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
-      msg->pose.orientation.z, msg->pose.orientation.w;
-  if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
+  orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z, msg->pose.orientation.w;
+  if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0)
+  {
     orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
   }
+
+  // ROS_INFO("New waypoint detected!");
+  waypoint_ = true;
 }
 
-void CartesianImpedanceExampleController::wrenchCallback(
-    const geometry_msgs::WrenchStamped::ConstPtr& msg) {
-  double force_z = msg->wrench.force.z;
-  ROS_INFO("Force on Z-axis: %f", force_z);
+void CartesianImpedanceExampleController::wrenchCallback(const geometry_msgs::WrenchStamped::ConstPtr& msg) 
+{
+  force_z_ = msg->wrench.force.z;
+  // ROS_INFO("Force on Z-axis: %f", force_z_);
 }
 
 }  // namespace franka_example_controllers
