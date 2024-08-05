@@ -16,7 +16,7 @@ class ForcePlotter:
 
         self.fig, self.ax = plt.subplots()
         self.line, = self.ax.plot([], [], 'r-')
-        self.ax.set_xlim(0, 50)
+        self.ax.set_xlim(0, 10)
         self.ax.set_ylim(-8, 2)
         self.ax.set_xlabel('Time (s)')
         self.ax.set_ylabel('Force Z (N)')
@@ -38,7 +38,7 @@ class ForcePlotter:
 
         # Keep only the last 10 seconds of data
         if len(self.time_data) > 1:
-            while self.time_data[-1] - self.time_data[0] > 50:
+            while self.time_data[-1] - self.time_data[0] > 10:
                 self.time_data.pop(0)
                 self.force_data.pop(0)
 

@@ -55,11 +55,11 @@ def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency):
 if __name__ == '__main__':
     try:
         # Parameters for the circle
-        radius = 0.15  # Radius of the circle in meters
-        center_x = 0.4  # X-coordinate of the circle center in meters
+        radius = 0.1  # Radius of the circle in meters
+        center_x = 0.5  # X-coordinate of the circle center in meters
         center_y = 0.0  # Y-coordinate of the circle center in meters
         center_z = 0.0  # Z-coordinate of the circle center in meters
-        speed_mm_s = 10  # Desired linear speed in mm/s
+        speed_mm_s = 3  # Desired linear speed in mm/s
         frequency = 10  # Publishing frequency in Hz
 
         publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency)

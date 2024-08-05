@@ -143,27 +143,26 @@ void CartesianImpedanceExampleController::starting(const ros::Time& time) {
 
 void CartesianImpedanceExampleController::update(const ros::Time& time,
                                                  const ros::Duration& /*period*/) {
-  // get state variables
+  // Get state variables
   franka::RobotState robot_state = state_handle_->getRobotState();
   std::array<double, 7> coriolis_array = model_handle_->getCoriolis();
-  std::array<double, 42> jacobian_array =
-      model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
+  std::array<double, 42> jacobian_array = model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
 
-  // convert to Eigen
+  // Convert to Eigen
   Eigen::Map<Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
   Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> q(robot_state.q.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
-  Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(  // NOLINT (readability-identifier-naming)
-      robot_state.tau_J_d.data());
+  Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(robot_state.tau_J_d.data());
   Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
   Eigen::Vector3d position(transform.translation());
   Eigen::Quaterniond orientation(transform.rotation());
+  Eigen::Matrix3d rotation_matrix = transform.linear();
 
   // Transform the force to the end effector frame
   Eigen::Vector3d force_ee(transform.linear().transpose() * Eigen::Vector3d(0.0, 0.0, force_z_));
   double force_err_z = target_force_z_ - force_ee.z();
-
+  
   // Compute the time difference
   double dt = (time - last_update_time_).toSec();
   last_update_time_ = time;
@@ -180,47 +179,52 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
                                  force_control_gain_i_ * force_integral_ + 
                                  force_control_gain_d_ * force_err_derivative_;
 
-  // compute error to desired pose
-  // position error
+  // Compute error to desired pose
+  // Position error
   Eigen::Matrix<double, 6, 1> error;
   error.head(3) << position - position_d_;
-  double distance_error = sqrt(error(0)*error(0) + error(1)*error(1) + error(2)*error(2));
+  double distance_error = error.head(3).norm();
 
-  // orientation error
+  // Orientation error
   if (orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0) {
     orientation.coeffs() << -orientation.coeffs();
   }
-  // "difference" quaternion
+  // "Difference" quaternion
   Eigen::Quaterniond error_quaternion(orientation.inverse() * orientation_d_);
   error.tail(3) << error_quaternion.x(), error_quaternion.y(), error_quaternion.z();
   // Transform to base frame
   error.tail(3) << -transform.rotation() * error.tail(3);
 
-  // Activate force controller when the positional error in Z-direction is 'close enough'
-  if ((distance_error < 0.05) && (waypoint_ == true)) {
-    position_d_(2) = -1 * position_adjustment_z;
-    ROS_INFO_STREAM("Position adjustment Z: " << position_adjustment_z);
-    ROS_INFO_STREAM("Force error: " << force_err_z);
-    // ROS_INFO_STREAM("Force integral: " << force_integral_);
-    // ROS_INFO_STREAM("Force error derivative: " << force_err_derivative_);
-    // ROS_INFO_STREAM("Position error: " << error.head(3).transpose());
-    // ROS_INFO_STREAM("Orientation error: " << error.tail(3).transpose());
-    ROS_INFO_STREAM("..................................");
+  // Correctly transform the position adjustment from the end effector frame to the base frame
+  if ((distance_error < 0.05) && waypoint_) {
+    Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
+
+    position_d_ += rotation_matrix * position_adjustment_ee;
+
+    // ROS_INFO_STREAM("Z ADJ: " << position_adjustment_ee);
+    // ROS_INFO_STREAM("BASE ADJ: " << position_adjustment_base);
+    ROS_INFO_STREAM("F ERR: " << force_err_z);
+    ROS_INFO_STREAM("Position: " << position);
+    ROS_INFO_STREAM("Position d: " << position_d_);
+    ROS_INFO_STREAM("Position target: " << position_d_target_);
+
+    ROS_INFO_STREAM("Using hybrid controller");
+  } else {
+    // ROS_INFO_STREAM("ONLY IMPEDANCE " << distance_error);
   }
 
-  // compute control
-  // allocate variables
+  // Compute control
+  // Allocate variables
   Eigen::VectorXd tau_task(7), tau_nullspace(7), tau_d(7);
 
-  // pseudoinverse for nullspace handling
-  // kinematic pseuoinverse
+  // Pseudoinverse for nullspace handling
   Eigen::MatrixXd jacobian_transpose_pinv;
   pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
 
   // Cartesian PD control with damping ratio = 1
   tau_task << jacobian.transpose() *
                   (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
-  // nullspace PD control with damping ratio = 1
+  // Nullspace PD control with damping ratio = 1
   tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
                     jacobian.transpose() * jacobian_transpose_pinv) *
                        (nullspace_stiffness_ * (q_d_nullspace_ - q) -
@@ -229,11 +233,12 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   tau_d << tau_task + tau_nullspace + coriolis;
   // Saturate torque rate to avoid discontinuities
   tau_d << saturateTorqueRate(tau_d, tau_J_d);
+
   for (size_t i = 0; i < 7; ++i) {
     joint_handles_[i].setCommand(tau_d(i));
   }
 
-  // update parameters changed online either through dynamic reconfigure or through the interactive
+  // Update parameters changed online either through dynamic reconfigure or through the interactive
   // target by filtering
   cartesian_stiffness_ =
       filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * cartesian_stiffness_;
