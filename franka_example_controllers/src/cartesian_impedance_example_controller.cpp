@@ -10,6 +10,7 @@
 #include <pluginlib/class_list_macros.h>
 #include <ros/ros.h>
 #include <geometry_msgs/WrenchStamped.h>
+#include <std_msgs/Bool.h>
 
 #include <franka_example_controllers/pseudo_inversion.h>
 
@@ -21,11 +22,15 @@ bool CartesianImpedanceExampleController::init(hardware_interface::RobotHW* robo
   std::vector<double> cartesian_damping_vector;
 
   sub_equilibrium_pose_ = node_handle.subscribe(
-      "equilibrium_pose", 20, &CartesianImpedanceExampleController::equilibriumPoseCallback, this,
+      "/equilibrium_pose", 20, &CartesianImpedanceExampleController::equilibriumPoseCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
 
   wrench_subscriber_ = node_handle.subscribe(
       "/franka_state_controller/F_ext", 10, &CartesianImpedanceExampleController::wrenchCallback, this,
+      ros::TransportHints().reliable().tcpNoDelay());
+
+  target_contact_subscriber_ = node_handle.subscribe(
+      "/target_contact", 10, &CartesianImpedanceExampleController::targetContactCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
 
   std::string arm_id;
@@ -108,7 +113,7 @@ bool CartesianImpedanceExampleController::init(hardware_interface::RobotHW* robo
   cartesian_damping_.setZero();
 
   target_force_z_ = 3.0; // N
-  waypoint_ = false;
+  target_contact_ = false;
 
   return true;
 }
@@ -133,9 +138,8 @@ void CartesianImpedanceExampleController::starting(const ros::Time& time) {
   force_integral_ = 0.0;
   last_update_time_ = time;
 
-  force_control_gain_p_ = 0.0001;
-  force_control_gain_i_ = 0.0005;
-  force_control_gain_d_ = 0.0;
+  force_control_gain_p_ = 0.00005;
+  force_control_gain_i_ = 0.000003;
 
   // set nullspace equilibrium configuration to initial q
   q_d_nullspace_ = q_initial;
@@ -170,14 +174,9 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   // Update the integral of the force error
   force_integral_ += force_err_z * dt;
 
-  // Compute the derivative of the force error
-  force_err_derivative_ = (force_err_z - previous_force_err_z_) / dt;
-  previous_force_err_z_ = force_err_z;
-
   // Compute the desired position adjustment using a PID controller
   double position_adjustment_z = force_control_gain_p_ * force_err_z + 
-                                 force_control_gain_i_ * force_integral_ + 
-                                 force_control_gain_d_ * force_err_derivative_;
+                                 force_control_gain_i_ * force_integral_;
 
   // Compute error to desired pose
   // Position error
@@ -196,21 +195,16 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   error.tail(3) << -transform.rotation() * error.tail(3);
 
   // Correctly transform the position adjustment from the end effector frame to the base frame
-  if ((distance_error < 0.05) && waypoint_) {
+  // if ((distance_error < 0.05) && target_contact_) {
+  if (target_contact_) {
     Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
+    position_d_ -= position_adjustment_ee;
 
-    position_d_ += rotation_matrix * position_adjustment_ee;
+    // Consider the 180-degree rotation around the y-axis
+    // Eigen::Matrix3d correction_rotation;
+    // correction_rotation = Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitY());
+    // position_d_ -= rotation_matrix * correction_rotation * position_adjustment_ee;
 
-    // ROS_INFO_STREAM("Z ADJ: " << position_adjustment_ee);
-    // ROS_INFO_STREAM("BASE ADJ: " << position_adjustment_base);
-    ROS_INFO_STREAM("F ERR: " << force_err_z);
-    ROS_INFO_STREAM("Position: " << position);
-    ROS_INFO_STREAM("Position d: " << position_d_);
-    ROS_INFO_STREAM("Position target: " << position_d_target_);
-
-    ROS_INFO_STREAM("Using hybrid controller");
-  } else {
-    // ROS_INFO_STREAM("ONLY IMPEDANCE " << distance_error);
   }
 
   // Compute control
@@ -291,15 +285,16 @@ void CartesianImpedanceExampleController::equilibriumPoseCallback(const geometry
   {
     orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
   }
-
-  // ROS_INFO("New waypoint detected!");
-  waypoint_ = true;
 }
 
 void CartesianImpedanceExampleController::wrenchCallback(const geometry_msgs::WrenchStamped::ConstPtr& msg) 
 {
   force_z_ = msg->wrench.force.z;
-  // ROS_INFO("Force on Z-axis: %f", force_z_);
+}
+
+void CartesianImpedanceExampleController::targetContactCallback(const std_msgs::Bool::ConstPtr& msg) 
+{
+  target_contact_ = msg->data;
 }
 
 }  // namespace franka_example_controllers

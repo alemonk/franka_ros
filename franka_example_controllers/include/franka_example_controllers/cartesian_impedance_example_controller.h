@@ -11,6 +11,7 @@
 #include <dynamic_reconfigure/server.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/WrenchStamped.h>
+#include <std_msgs/Bool.h>
 #include <hardware_interface/joint_command_interface.h>
 #include <hardware_interface/robot_hw.h>
 #include <ros/node_handle.h>
@@ -60,13 +61,12 @@ class CartesianImpedanceExampleController : public controller_interface::MultiIn
   // Hybrid controller
   ros::Time last_update_time_;
   double previous_force_err_z_;
-  double force_err_derivative_;
   double force_integral_;
   double target_force_z_;
   double force_z_;
   double force_control_gain_p_;
   double force_control_gain_i_;
-  double force_control_gain_d_;
+  bool target_contact_;
 
   // Dynamic reconfigure
   std::unique_ptr<dynamic_reconfigure::Server<franka_example_controllers::compliance_paramConfig>>
@@ -78,10 +78,10 @@ class CartesianImpedanceExampleController : public controller_interface::MultiIn
   // Equilibrium pose subscriber
   ros::Subscriber sub_equilibrium_pose_;
   ros::Subscriber wrench_subscriber_;
+  ros::Subscriber target_contact_subscriber_;
   void equilibriumPoseCallback(const geometry_msgs::PoseStampedConstPtr& msg);
   void wrenchCallback(const geometry_msgs::WrenchStamped::ConstPtr& msg);
-
-  bool waypoint_;
+  void targetContactCallback(const std_msgs::Bool::ConstPtr& msg);
 
 };
 

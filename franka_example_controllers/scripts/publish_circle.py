@@ -59,7 +59,7 @@ if __name__ == '__main__':
         center_x = 0.5  # X-coordinate of the circle center in meters
         center_y = 0.0  # Y-coordinate of the circle center in meters
         center_z = 0.0  # Z-coordinate of the circle center in meters
-        speed_mm_s = 3  # Desired linear speed in mm/s
+        speed_mm_s = 40  # Desired linear speed in mm/s
         frequency = 10  # Publishing frequency in Hz
 
         publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency)
