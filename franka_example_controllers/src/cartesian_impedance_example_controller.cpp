@@ -200,7 +200,7 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   // if ((distance_error < 0.05) && target_contact_) {
   if (target_contact_) {
     Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
-    position_d_ -= rotation_matrix * position_adjustment_ee;
+    position_d_ += rotation_matrix * position_adjustment_ee;
 
     // Consider the 180-degree rotation around the y-axis
     // Eigen::Matrix3d correction_rotation;
