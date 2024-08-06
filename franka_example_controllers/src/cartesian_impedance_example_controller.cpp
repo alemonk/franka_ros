@@ -22,7 +22,7 @@ bool CartesianImpedanceExampleController::init(hardware_interface::RobotHW* robo
   std::vector<double> cartesian_damping_vector;
 
   sub_equilibrium_pose_ = node_handle.subscribe(
-      "/equilibrium_pose", 20, &CartesianImpedanceExampleController::equilibriumPoseCallback, this,
+      "/cartesian_impedance_example_controller/equilibrium_pose", 20, &CartesianImpedanceExampleController::equilibriumPoseCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
 
   wrench_subscriber_ = node_handle.subscribe(
@@ -30,7 +30,7 @@ bool CartesianImpedanceExampleController::init(hardware_interface::RobotHW* robo
       ros::TransportHints().reliable().tcpNoDelay());
 
   target_contact_subscriber_ = node_handle.subscribe(
-      "/target_contact", 10, &CartesianImpedanceExampleController::targetContactCallback, this,
+      "/cartesian_impedance_example_controller/target_contact", 10, &CartesianImpedanceExampleController::targetContactCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
 
   std::string arm_id;
@@ -140,6 +140,8 @@ void CartesianImpedanceExampleController::starting(const ros::Time& time) {
 
   force_control_gain_p_ = 0.00005;
   force_control_gain_i_ = 0.000003;
+  // force_control_gain_p_ = 0.0;
+  // force_control_gain_i_ = 0.0;
 
   // set nullspace equilibrium configuration to initial q
   q_d_nullspace_ = q_initial;
@@ -198,7 +200,7 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   // if ((distance_error < 0.05) && target_contact_) {
   if (target_contact_) {
     Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
-    position_d_ -= position_adjustment_ee;
+    position_d_ -= rotation_matrix * position_adjustment_ee;
 
     // Consider the 180-degree rotation around the y-axis
     // Eigen::Matrix3d correction_rotation;

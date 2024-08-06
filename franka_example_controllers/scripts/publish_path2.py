@@ -1,11 +1,10 @@
-#!/usr/bin/env python
-
 import rospy
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Header, Bool
 from franka_msgs.msg import FrankaState
 import math
 import numpy as np
+import tf.transformations as tf_trans
 
 current_pose = None
 
@@ -34,40 +33,28 @@ def franka_state_callback(msg):
 
 def quaternion_from_matrix(matrix):
     """Convert a rotation matrix to a quaternion."""
-    q = np.empty((4, ))
-    m = np.array(matrix, dtype=np.float64, copy=False)
-    t = np.trace(m)
-    if t > 0.0:
-        t = np.sqrt(t + 1.0)
-        q[3] = t * 0.5
-        t = 0.5 / t
-        q[0] = (m[2, 1] - m[1, 2]) * t
-        q[1] = (m[0, 2] - m[2, 0]) * t
-        q[2] = (m[1, 0] - m[0, 1]) * t
-    else:
-        i = np.argmax(np.diagonal(m))
-        if i == 0:
-            t = np.sqrt(1.0 + m[0, 0] - m[1, 1] - m[2, 2])
-            q[0] = t * 0.5
-            t = 0.5 / t
-            q[1] = (m[0, 1] + m[1, 0]) * t
-            q[2] = (m[0, 2] + m[2, 0]) * t
-            q[3] = (m[2, 1] - m[1, 2]) * t
-        elif i == 1:
-            t = np.sqrt(1.0 + m[1, 1] - m[0, 0] - m[2, 2])
-            q[1] = t * 0.5
-            t = 0.5 / t
-            q[0] = (m[0, 1] + m[1, 0]) * t
-            q[2] = (m[1, 2] + m[2, 1]) * t
-            q[3] = (m[0, 2] - m[2, 0]) * t
-        else:
-            t = np.sqrt(1.0 + m[2, 2] - m[0, 0] - m[1, 1])
-            q[2] = t * 0.5
-            t = 0.5 / t
-            q[0] = (m[0, 2] + m[2, 0]) * t
-            q[1] = (m[1, 2] + m[2, 1]) * t
-            q[3] = (m[1, 0] - m[0, 1]) * t
-    return q
+    return tf_trans.quaternion_from_matrix(np.pad(matrix, ((0, 1), (0, 1)), mode='constant', constant_values=0) + np.eye(4))
+
+def slerp(q0, q1, t):
+    """Spherical Linear Interpolation between two quaternions."""
+    dot = np.dot(q0, q1)
+
+    if dot < 0.0:
+        q1 = -q1
+        dot = -dot
+
+    if dot > 0.95:
+        result = q0 + t * (q1 - q0)
+        result /= np.linalg.norm(result)
+        return result
+
+    theta_0 = np.arccos(dot)
+    theta = theta_0 * t
+
+    q2 = q1 - q0 * dot
+    q2 /= np.linalg.norm(q2)
+
+    return q0 * np.cos(theta) + q2 * np.sin(theta)
 
 def arctan_interpolation(t, total_steps, scaling_factor=5):
     return (math.atan(scaling_factor * (t / total_steps - 0.5)) + math.atan(scaling_factor / 2)) / (2 * math.atan(scaling_factor / 2))
@@ -86,7 +73,14 @@ def move_robot_smoothly(start_pose, end_pose, frequency, duration):
         intermediate_pose.pose.position.y = (1 - alpha) * start_pose.pose.position.y + alpha * end_pose.pose.position.y
         intermediate_pose.pose.position.z = (1 - alpha) * start_pose.pose.position.z + alpha * end_pose.pose.position.z
 
-        intermediate_pose.pose.orientation = start_pose.pose.orientation
+        start_quat = np.array([start_pose.pose.orientation.x, start_pose.pose.orientation.y, start_pose.pose.orientation.z, start_pose.pose.orientation.w])
+        end_quat = np.array([end_pose.pose.orientation.x, end_pose.pose.orientation.y, end_pose.pose.orientation.z, end_pose.pose.orientation.w])
+        interp_quat = slerp(start_quat, end_quat, alpha)
+
+        intermediate_pose.pose.orientation.x = interp_quat[0]
+        intermediate_pose.pose.orientation.y = interp_quat[1]
+        intermediate_pose.pose.orientation.z = interp_quat[2]
+        intermediate_pose.pose.orientation.w = interp_quat[3]
         
         intermediate_pose.header.stamp = rospy.Time.now()
         pose_pub.publish(intermediate_pose)
@@ -114,14 +108,19 @@ def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency):
     start_pose.pose.position.y = center_y
     start_pose.pose.position.z = center_z
 
-    start_pose.pose.orientation.x = 1.0
-    start_pose.pose.orientation.y = 0.0
-    start_pose.pose.orientation.z = 0.0
-    start_pose.pose.orientation.w = 0.0
+    # Create a quaternion representing a 90-degree
+    quat = tf_trans.quaternion_from_euler(-math.pi / 2, 0, 0)
+    start_pose.pose.orientation.x = quat[0]
+    start_pose.pose.orientation.y = quat[1]
+    start_pose.pose.orientation.z = quat[2]
+    start_pose.pose.orientation.w = quat[3]
 
     # Move to the circle starting point
     rospy.loginfo("Moving to the circle starting point...")
     move_robot_smoothly(initial_pose, start_pose, frequency, duration=5.0)
+    t = start_pose
+    start_pose.pose.position.y = start_pose.pose.position.y + 0.26
+    move_robot_smoothly(t, start_pose, frequency, duration=5.0)
 
     # Convert speed from mm/s to m/s
     speed_m_s = speed_mm_s / 1000.0
@@ -142,8 +141,8 @@ def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency):
             
             # Set the desired position
             start_pose.pose.position.x = center_x + radius * math.cos(angle)
-            start_pose.pose.position.y = center_y + radius * math.sin(angle)
-            start_pose.pose.position.z = center_z
+            start_pose.pose.position.y = center_y + 0.26
+            start_pose.pose.position.z = center_z + radius * math.sin(angle)
             
             # Update the header timestamp
             start_pose.header.stamp = rospy.Time.now()
@@ -165,7 +164,7 @@ if __name__ == '__main__':
         radius = 0.1  # Radius of the circle in meters
         center_x = 0.5  # X-coordinate of the circle center in meters
         center_y = 0.0  # Y-coordinate of the circle center in meters
-        center_z = 0.0  # Z-coordinate of the circle center in meters
+        center_z = 0.25  # Z-coordinate of the circle center in meters
         speed_mm_s = 40  # Desired linear speed in mm/s
         frequency = 2  # Publishing frequency in Hz
 
