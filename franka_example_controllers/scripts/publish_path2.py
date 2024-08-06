@@ -119,7 +119,7 @@ def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency):
     rospy.loginfo("Moving to the circle starting point...")
     move_robot_smoothly(initial_pose, start_pose, frequency, duration=5.0)
     t = start_pose
-    start_pose.pose.position.y = start_pose.pose.position.y + 0.26
+    start_pose.pose.position.y = start_pose.pose.position.y + 0.25
     move_robot_smoothly(t, start_pose, frequency, duration=5.0)
 
     # Convert speed from mm/s to m/s
@@ -141,7 +141,7 @@ def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency):
             
             # Set the desired position
             start_pose.pose.position.x = center_x + radius * math.cos(angle)
-            start_pose.pose.position.y = center_y + 0.26
+            start_pose.pose.position.y = center_y + 0.25
             start_pose.pose.position.z = center_z + radius * math.sin(angle)
             
             # Update the header timestamp
