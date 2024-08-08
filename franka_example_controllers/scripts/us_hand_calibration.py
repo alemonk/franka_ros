@@ -4,7 +4,7 @@ from std_msgs.msg import Header, Bool
 import math
 import numpy as np
 import tf.transformations as tf_trans
-from utils import *
+from utils import get_current_pose
 import time
 import getpass
 
@@ -24,7 +24,10 @@ def perform_rotation_motion(initial_pose, distance, angle, frequency, axis, num_
 
     # Define the initial position in the plane
     initial_position = np.array([initial_pose.pose.position.x, initial_pose.pose.position.y, initial_pose.pose.position.z])
-    position_vector = np.array([0, 0, distance])
+    _, R = get_current_pose()
+    position_vector_ee = np.array([0, 0, -distance])
+    position_vector_base = np.dot(R, position_vector_ee)
+    pivot_point = initial_position - position_vector_base
 
     # Convert the initial orientation to a quaternion
     quat_in = np.array([initial_pose.pose.orientation.x, initial_pose.pose.orientation.y, initial_pose.pose.orientation.z, initial_pose.pose.orientation.w])
@@ -41,16 +44,19 @@ def perform_rotation_motion(initial_pose, distance, angle, frequency, axis, num_
         # Multiply the quaternions to get the new orientation
         quat_out = tf_trans.quaternion_multiply(quat_rotation, quat_in)
         
-        # Apply the rotation to the position vector
-        rotated_position = tf_trans.quaternion_matrix(quat_out)[:3, :3].dot(position_vector)
-        print(rotated_position)
+        # Create the rotation matrix from the quaternion
+        rotation_matrix = tf_trans.quaternion_matrix(quat_rotation)[:3, :3]
         
-        # Convert rotated_position to the base frame
-        rotated_position_base_frame = initial_position + rotated_position - position_vector
-
-        rotation_pose.pose.position.x = rotated_position_base_frame[0]
-        rotation_pose.pose.position.y = rotated_position_base_frame[1]
-        rotation_pose.pose.position.z = rotated_position_base_frame[2]
+        # Rotate the position vector relative to the initial position
+        rotated_position = rotation_matrix.dot(position_vector_base)
+        
+        # Combine the initial position with the rotated offset
+        new_position = pivot_point + rotated_position
+        
+        # Update the rotation_pose with the new position and orientation
+        rotation_pose.pose.position.x = new_position[0]
+        rotation_pose.pose.position.y = new_position[1]
+        rotation_pose.pose.position.z = new_position[2]
         rotation_pose.pose.orientation.x = quat_out[0]
         rotation_pose.pose.orientation.y = quat_out[1]
         rotation_pose.pose.orientation.z = quat_out[2]
@@ -74,7 +80,7 @@ def perform_rotation_motion(initial_pose, distance, angle, frequency, axis, num_
 if __name__ == '__main__':
     try:
         # Parameters for the screw motion
-        distance = 0.0  # Distance perpendicular to the end effector's original position in meters
+        distance = 0.1  # Distance perpendicular to the end effector's original position in meters
         frequency = 10  # Publishing frequency in Hz
 
         rospy.init_node('screw_pose_publisher', anonymous=True)

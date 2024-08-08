@@ -96,11 +96,11 @@ def get_current_pose():
     current_pose.pose.position.y = msg.O_T_EE[13]
     current_pose.pose.position.z = msg.O_T_EE[14]
 
-    # Extract rotation matrix from O_T_EE
+    # Extract rotation matrix from O_T_EE    
     R = np.array([
-        [msg.O_T_EE[0], msg.O_T_EE[1], msg.O_T_EE[2]],
-        [msg.O_T_EE[4], msg.O_T_EE[5], msg.O_T_EE[6]],
-        [msg.O_T_EE[8], msg.O_T_EE[9], msg.O_T_EE[10]]
+        [msg.O_T_EE[0], msg.O_T_EE[4], msg.O_T_EE[8]],
+        [msg.O_T_EE[1], msg.O_T_EE[5], msg.O_T_EE[9]],
+        [msg.O_T_EE[2], msg.O_T_EE[6], msg.O_T_EE[10]]
     ])
 
     # Convert rotation matrix to quaternion
