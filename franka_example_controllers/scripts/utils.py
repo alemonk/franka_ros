@@ -8,11 +8,24 @@ from franka_msgs.msg import FrankaState
 import time
 
 def quaternion_from_matrix(matrix):
-    """Convert a rotation matrix to a quaternion."""
+    """Convert a 3x3 rotation matrix to a quaternion."""
+    # Ensure the matrix is a valid 3x3 matrix
+    assert matrix.shape == (3, 3), "Input matrix must be 3x3"
+
+    # Create a 4x4 identity matrix
     m = np.eye(4)
+    
+    # Replace the top-left 3x3 part with the rotation matrix
     m[:3, :3] = matrix[:3, :3]
+
+    # Convert to quaternion using the proper 4x4 matrix
     q = tf_trans.quaternion_from_matrix(m)
-    return q / np.linalg.norm(q)
+    
+    # Normalize the quaternion to avoid any potential drift
+    q = q / np.linalg.norm(q)
+
+    return q
+
 
 def slerp(q0, q1, t):
     """Spherical Linear Interpolation between two quaternions."""
@@ -98,27 +111,37 @@ def get_current_pose():
     current_pose.pose.orientation.z = q[2]
     current_pose.pose.orientation.w = q[3]
 
+    # determine_rotation(R)
+
     return current_pose, R
 
 def get_rotation_matrix(axis, angle):
-    if axis == 'x':
-        R = np.array([
-            [1, 0, 0],
-            [0, math.cos(angle), -math.sin(angle)],
-            [0, math.sin(angle), math.cos(angle)]
-        ])
-    elif axis == 'y':
-        R = np.array([
-            [math.cos(angle), 0, math.sin(angle)],
-            [0, 1, 0],
-            [-math.sin(angle), 0, math.cos(angle)]
-        ])
-    elif axis == 'z':
-        R = np.array([
-            [math.cos(angle), -math.sin(angle), 0],
-            [math.sin(angle), math.cos(angle), 0],
-            [0, 0, 1]
-        ])
-    else:
-        raise ValueError("Invalid rotation axis. Choose 'x', 'y', or 'z'.")
+    axis = np.asarray(axis)
+    axis = axis / np.linalg.norm(axis)
+    a = math.cos(angle / 2.0)
+    b, c, d = -axis * math.sin(angle / 2.0)
+    aa, bb, cc, dd = a * a, b * b, c * c, d * d
+    bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+    R = np.array([
+        [aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
+        [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
+        [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]
+    ])
     return R
+
+def determine_rotation(R):
+
+    # Calculate the angle of rotation
+    theta = np.arccos((np.trace(R) - 1) / 2)
+
+    # Calculate the axis of rotation
+    axis = np.array([
+        R[2, 1] - R[1, 2],
+        R[0, 2] - R[2, 0],
+        R[1, 0] - R[0, 1]
+    ]) / (2 * np.sin(theta))
+
+    print('......................................')
+    print(f'Rotation matrix:\n{R}')
+    print(f'Rotation: {np.degrees(theta)}° around the axis: {axis / np.linalg.norm(axis)}')
+    print('......................................')
