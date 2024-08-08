@@ -210,7 +210,22 @@ def rotation_motion(distance, angle, axis):
         # Sleep to maintain the rate
         rate.sleep()
 
-    # Move back to the initial position
     getpass.getpass("Press Enter to continue...")
-
     return rotation_pose
+
+def linear_motion_z_axis(distance):
+    current_pose, R = get_current_pose()
+    initial_position = np.array([current_pose.pose.position.x, current_pose.pose.position.y, current_pose.pose.position.z])
+    position_vector_ee = np.array([0, 0, distance])
+    position_vector_base = np.dot(R, position_vector_ee)
+
+    end_position = initial_position + position_vector_base
+    end_pose = current_pose
+    end_pose.pose.position.x = end_position[0]
+    end_pose.pose.position.y = end_position[1]
+    end_pose.pose.position.z = end_position[2]
+
+    move_robot_from_A_to_B(end_pose)
+
+    getpass.getpass("Press Enter to continue...")
+    return end_pose

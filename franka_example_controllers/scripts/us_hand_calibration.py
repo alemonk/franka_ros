@@ -1,5 +1,5 @@
 import rospy
-from utils import get_current_pose, rotation_motion
+from utils import get_current_pose, rotation_motion, linear_motion_z_axis
 import time
 import getpass
 
@@ -13,11 +13,19 @@ if __name__ == '__main__':
 
         initial_pose, _ = get_current_pose()
         initial_pose = rotation_motion(distance, 30, [1, 0, 0])
+        initial_pose = linear_motion_z_axis(distance)
+        initial_pose = linear_motion_z_axis(-distance)
         initial_pose = rotation_motion(distance, -60, [1, 0, 0])
+        initial_pose = linear_motion_z_axis(distance)
+        initial_pose = linear_motion_z_axis(-distance)
         initial_pose = rotation_motion(distance, 30, [1, 0, 0])
 
         initial_pose = rotation_motion(distance, 30, [0, 1, 0])
+        initial_pose = linear_motion_z_axis(distance)
+        initial_pose = linear_motion_z_axis(-distance)
         initial_pose = rotation_motion(distance, -60, [0, 1, 0])
+        initial_pose = linear_motion_z_axis(distance)
+        initial_pose = linear_motion_z_axis(-distance)
         initial_pose = rotation_motion(distance, 30, [0, 1, 0])
 
         initial_pose = rotation_motion(distance, 30, [0, 0, 1])
