@@ -204,7 +204,7 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
 
     // ROS_INFO_STREAM("force_ee: "<<force_ee);
     // ROS_INFO_STREAM("rotation_matrix: "<<rotation_matrix);
-    ROS_INFO_STREAM("position_d_: "<<position_d_);
+    // ROS_INFO_STREAM("position_d_: "<<position_d_);
     // ROS_INFO_STREAM("position: "<<position);
   }
 
