@@ -44,7 +44,7 @@ def slerp(q0, q1, t):
 def arctan_interpolation(t, total_steps, scaling_factor=5):
     return (math.atan(scaling_factor * (t / total_steps - 0.5)) + math.atan(scaling_factor / 2)) / (2 * math.atan(scaling_factor / 2))
 
-def move_robot_to_pose(start_pose, end_pose, duration=2, frequency=10):
+def move_robot_to_pose(start_pose, end_pose, duration=1, frequency=10):
     pose_pub = rospy.Publisher('/cartesian_impedance_example_controller/equilibrium_pose', PoseStamped, queue_size=10)
     contact_pub = rospy.Publisher('/cartesian_impedance_example_controller/target_contact', Bool, queue_size=10)
     rate = rospy.Rate(frequency)
@@ -210,7 +210,7 @@ def linear_motion_z_axis(start_pose, distance):
     _ = move_robot_to_pose(start_pose, end_pose)
     return end_pose
 
-def wait_until_reached(end_pose, position_tolerance=0.005, orientation_tolerance=0.05, frequency=10):
+def wait_until_reached(end_pose, position_tolerance=0.01, orientation_tolerance=0.05, frequency=10):
     """
     Waits until the end effector reaches the specified pose within the given tolerances.
 
@@ -236,7 +236,7 @@ def wait_until_reached(end_pose, position_tolerance=0.005, orientation_tolerance
         t2 = time.time()
         delta_t = t2 - t1
         
-        if (position_difference < position_tolerance and orientation_difference < orientation_tolerance) or delta_t > 10:
+        if (position_difference < position_tolerance and orientation_difference < orientation_tolerance) or delta_t > 5:
             time.sleep(1)
             print("End effector has reached the target pose.")
             break

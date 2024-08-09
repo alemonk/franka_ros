@@ -32,7 +32,7 @@ def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency):
 
     # Move to the circle starting point
     rospy.loginfo("Moving to the circle starting point...")
-    _ = move_robot_to_pose(copy.deepcopy(initial_pose), start_pose, duration=5.0)
+    _ = move_robot_to_pose(copy.deepcopy(initial_pose), start_pose, duration=8)
 
     # Convert speed from mm/s to m/s
     speed_m_s = speed_mm_s / 1000.0

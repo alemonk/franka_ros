@@ -138,7 +138,7 @@ void CartesianImpedanceExampleController::starting(const ros::Time& time) {
   force_integral_ = 0.0;
   last_update_time_ = time;
 
-  force_control_gain_p_ = 0.00005;
+  force_control_gain_p_ = 0.00003;
   force_control_gain_i_ = 0.000003;
   // force_control_gain_p_ = 0.0;
   // force_control_gain_i_ = 0.0;

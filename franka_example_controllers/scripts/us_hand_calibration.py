@@ -15,7 +15,7 @@ if __name__ == '__main__':
         initial_pose.pose.position.x += 0.1
         initial_pose.pose.position.z -= 0.1
 
-        p = move_robot_to_pose(current_pose, initial_pose)
+        p = move_robot_to_pose(current_pose, initial_pose, duration=5)
 
         # y axis
         p = rotation_motion(p, distance, 30, [0, 1, 0])
