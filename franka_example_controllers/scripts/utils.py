@@ -4,29 +4,17 @@ import tf.transformations as tf_trans
 import rospy
 from geometry_msgs.msg import PoseStamped
 from franka_msgs.msg import FrankaState
-import time
 from std_msgs.msg import Header, Bool
-import getpass
+import time
+import copy
 
 def quaternion_from_matrix(matrix):
     """Convert a 3x3 rotation matrix to a quaternion."""
-    # Ensure the matrix is a valid 3x3 matrix
-    assert matrix.shape == (3, 3), "Input matrix must be 3x3"
-
-    # Create a 4x4 identity matrix
     m = np.eye(4)
-    
-    # Replace the top-left 3x3 part with the rotation matrix
     m[:3, :3] = matrix[:3, :3]
-
-    # Convert to quaternion using the proper 4x4 matrix
     q = tf_trans.quaternion_from_matrix(m)
-    
-    # Normalize the quaternion to avoid any potential drift
     q = q / np.linalg.norm(q)
-
     return q
-
 
 def slerp(q0, q1, t):
     """Spherical Linear Interpolation between two quaternions."""
@@ -56,22 +44,22 @@ def slerp(q0, q1, t):
 def arctan_interpolation(t, total_steps, scaling_factor=5):
     return (math.atan(scaling_factor * (t / total_steps - 0.5)) + math.atan(scaling_factor / 2)) / (2 * math.atan(scaling_factor / 2))
 
-def move_robot_from_A_to_B(end_pose, frequency=5, duration=2):
+def move_robot_to_pose(start_pose, end_pose, duration=2, frequency=10):
     pose_pub = rospy.Publisher('/cartesian_impedance_example_controller/equilibrium_pose', PoseStamped, queue_size=10)
     contact_pub = rospy.Publisher('/cartesian_impedance_example_controller/target_contact', Bool, queue_size=10)
     rate = rospy.Rate(frequency)
 
-    start_pose, _ = get_current_pose()
+    intermediate_pose = start_pose
  
-    steps = int(frequency * duration)
+    steps = int(duration * frequency)
     for i in range(steps):
-        alpha = arctan_interpolation(i, steps)
-        intermediate_pose = PoseStamped()
-        intermediate_pose.header.frame_id = start_pose.header.frame_id
+        alpha = float(i) / float(steps)
+        # Position interpolation
         intermediate_pose.pose.position.x = (1 - alpha) * start_pose.pose.position.x + alpha * end_pose.pose.position.x
         intermediate_pose.pose.position.y = (1 - alpha) * start_pose.pose.position.y + alpha * end_pose.pose.position.y
         intermediate_pose.pose.position.z = (1 - alpha) * start_pose.pose.position.z + alpha * end_pose.pose.position.z
 
+        # Quaternion (Orientation) interpolation
         start_quat = np.array([start_pose.pose.orientation.x, start_pose.pose.orientation.y, start_pose.pose.orientation.z, start_pose.pose.orientation.w])
         end_quat = np.array([end_pose.pose.orientation.x, end_pose.pose.orientation.y, end_pose.pose.orientation.z, end_pose.pose.orientation.w])
         interp_quat = slerp(start_quat, end_quat, alpha)
@@ -79,15 +67,22 @@ def move_robot_from_A_to_B(end_pose, frequency=5, duration=2):
         # Normalize the interpolated quaternion
         interp_quat /= np.linalg.norm(interp_quat)
 
+        # Set the orientation in the intermediate pose
         intermediate_pose.pose.orientation.x = interp_quat[0]
         intermediate_pose.pose.orientation.y = interp_quat[1]
         intermediate_pose.pose.orientation.z = interp_quat[2]
         intermediate_pose.pose.orientation.w = interp_quat[3]
-        
+
+        # Update timestamp and publish
         intermediate_pose.header.stamp = rospy.Time.now()
         pose_pub.publish(intermediate_pose)
         contact_pub.publish(False)
+
         rate.sleep()
+
+    # Wait until the final pose is reached
+    wait_until_reached(end_pose)
+    return intermediate_pose
 
 def get_current_pose():
     msg = rospy.wait_for_message('/franka_state_controller/franka_states', FrankaState)
@@ -147,12 +142,12 @@ def determine_rotation(R):
     print(f'Rotation: {np.degrees(theta)}° around the axis: {axis / np.linalg.norm(axis)}')
     print('......................................')
 
-def rotation_motion(distance, angle, axis):
+def rotation_motion(start_pose, distance, angle, axis, frequency=10):
     print(f'Performing a {angle} degrees rotation around {axis} axis')
 
     pose_pub = rospy.Publisher('/cartesian_impedance_example_controller/equilibrium_pose', PoseStamped, queue_size=100)
     contact_pub = rospy.Publisher('/cartesian_impedance_example_controller/target_contact', Bool, queue_size=100)
-    rate = rospy.Rate(10)
+    rate = rospy.Rate(frequency)
 
     # Starting position for the rotation motion
     rotation_pose = PoseStamped()
@@ -160,38 +155,26 @@ def rotation_motion(distance, angle, axis):
     rotation_pose.header.frame_id = "panda_link0"
 
     # Define the initial position in the plane
-    current_pose, R_in = get_current_pose()
-    initial_position = np.array([current_pose.pose.position.x, current_pose.pose.position.y, current_pose.pose.position.z])
+    _, R_in = get_current_pose()
+    start_position = np.array([start_pose.pose.position.x, start_pose.pose.position.y, start_pose.pose.position.z])
     position_vector_ee = np.array([0, 0, -distance])
     position_vector_base = np.dot(R_in, position_vector_ee)
-    pivot_point = initial_position - position_vector_base
+    pivot_point = start_position - position_vector_base
 
-    # Convert the initial orientation to a quaternion
-    quat_in = np.array([current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z, current_pose.pose.orientation.w])
-
-    # Define the quaternion representing the rotation around the given axis
+    quat_in = np.array([start_pose.pose.orientation.x, start_pose.pose.orientation.y, start_pose.pose.orientation.z, start_pose.pose.orientation.w])
     axis_normalized = np.array(axis) / np.linalg.norm(axis)
     
     num_steps = abs(angle)
     for step in range(num_steps + 1):
         angle_step = (math.radians(angle) / num_steps) * step
 
-        # Create a quaternion representing the rotation for this step
         quat_rotation = tf_trans.quaternion_about_axis(angle_step, axis_normalized)
-        
-        # Multiply the quaternions to get the new orientation
         quat_out = tf_trans.quaternion_multiply(quat_rotation, quat_in)
         
-        # Create the rotation matrix from the quaternion
         rotation_matrix = tf_trans.quaternion_matrix(quat_rotation)[:3, :3]
-        
-        # Rotate the position vector relative to the initial position
         rotated_position = rotation_matrix.dot(position_vector_base)
-        
-        # Combine the initial position with the rotated offset
         new_position = pivot_point + rotated_position
         
-        # Update the rotation_pose with the new position and orientation
         rotation_pose.pose.position.x = new_position[0]
         rotation_pose.pose.position.y = new_position[1]
         rotation_pose.pose.position.z = new_position[2]
@@ -200,32 +183,62 @@ def rotation_motion(distance, angle, axis):
         rotation_pose.pose.orientation.z = quat_out[2]
         rotation_pose.pose.orientation.w = quat_out[3]
         
-        # Update the header timestamp
         rotation_pose.header.stamp = rospy.Time.now()
-        
-        # Publish the pose
         pose_pub.publish(rotation_pose)
         contact_pub.publish(False)
 
-        # Sleep to maintain the rate
         rate.sleep()
 
-    getpass.getpass("Press Enter to continue...")
+    wait_until_reached(rotation_pose)
     return rotation_pose
 
-def linear_motion_z_axis(distance):
-    current_pose, R = get_current_pose()
-    initial_position = np.array([current_pose.pose.position.x, current_pose.pose.position.y, current_pose.pose.position.z])
+def linear_motion_z_axis(start_pose, distance):
+    print(f"Performing a {distance}m linear motion along the end effector's z axis")
+
+    _, R = get_current_pose()
+    start_position = np.array([start_pose.pose.position.x, start_pose.pose.position.y, start_pose.pose.position.z])
     position_vector_ee = np.array([0, 0, distance])
     position_vector_base = np.dot(R, position_vector_ee)
 
-    end_position = initial_position + position_vector_base
-    end_pose = current_pose
+    end_position = start_position + position_vector_base
+
+    end_pose = copy.deepcopy(start_pose)
     end_pose.pose.position.x = end_position[0]
     end_pose.pose.position.y = end_position[1]
     end_pose.pose.position.z = end_position[2]
 
-    move_robot_from_A_to_B(end_pose)
-
-    getpass.getpass("Press Enter to continue...")
+    _ = move_robot_to_pose(start_pose, end_pose)
     return end_pose
+
+def wait_until_reached(end_pose, position_tolerance=0.005, orientation_tolerance=0.05, frequency=10):
+    """
+    Waits until the end effector reaches the specified pose within the given tolerances.
+
+    :param end_pose: The target pose (of type PoseStamped) the end effector should reach.
+    :param position_tolerance: The allowable difference between the current and target positions (in meters).
+    :param orientation_tolerance: The allowable difference between the current and target orientations (in radians).
+    :param frequency: The rate at which to check the current pose (in Hz).
+    """
+    rate = rospy.Rate(frequency)
+    t1 = time.time()
+    
+    while True:
+        current_pose, _ = get_current_pose()
+        current_position = np.array([current_pose.pose.position.x, current_pose.pose.position.y, current_pose.pose.position.z])
+        target_position = np.array([end_pose.pose.position.x, end_pose.pose.position.y, end_pose.pose.position.z])
+        
+        current_orientation = np.array([current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z, current_pose.pose.orientation.w])
+        target_orientation = np.array([end_pose.pose.orientation.x, end_pose.pose.orientation.y, end_pose.pose.orientation.z, end_pose.pose.orientation.w])
+        
+        position_difference = np.linalg.norm(current_position - target_position)
+        orientation_difference = 2 * math.acos(np.clip(np.dot(current_orientation, target_orientation), -1.0, 1.0))
+
+        t2 = time.time()
+        delta_t = t2 - t1
+        
+        if (position_difference < position_tolerance and orientation_difference < orientation_tolerance) or delta_t > 10:
+            time.sleep(1)
+            print("End effector has reached the target pose.")
+            break
+        
+        rate.sleep()

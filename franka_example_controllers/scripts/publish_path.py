@@ -135,7 +135,7 @@ def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency):
     # Calculate the number of points based on the time and frequency
     points = int(time_to_complete_circle * frequency)
 
-    for _ in range(2):  # Complete two circles
+    for _ in range(1):
         for i in range(points):
             # Calculate the angle for the current point
             angle = 2 * math.pi * i / points

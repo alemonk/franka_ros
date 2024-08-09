@@ -6,45 +6,15 @@ import math
 import numpy as np
 import tf.transformations as tf_trans
 from utils import *
-
-current_pose = None
-
-def franka_state_callback(msg):
-    global current_pose
-    current_pose = PoseStamped()
-    current_pose.header = msg.header
-    current_pose.pose.position.x = msg.O_T_EE[12]
-    current_pose.pose.position.y = msg.O_T_EE[13]
-    current_pose.pose.position.z = msg.O_T_EE[14]
-
-    # Extract rotation matrix from O_T_EE
-    R = np.array([
-        [msg.O_T_EE[0], msg.O_T_EE[1], msg.O_T_EE[2]],
-        [msg.O_T_EE[4], msg.O_T_EE[5], msg.O_T_EE[6]],
-        [msg.O_T_EE[8], msg.O_T_EE[9], msg.O_T_EE[10]]
-    ])
-
-    # Convert rotation matrix to quaternion
-    q = quaternion_from_matrix(R)
-
-    current_pose.pose.orientation.x = q[0]
-    current_pose.pose.orientation.y = q[1]
-    current_pose.pose.orientation.z = q[2]
-    current_pose.pose.orientation.w = q[3]
+import copy
 
 def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency):
     rospy.init_node('circle_pose_publisher', anonymous=True)
     pose_pub = rospy.Publisher('/cartesian_impedance_example_controller/equilibrium_pose', PoseStamped, queue_size=10)
     contact_pub = rospy.Publisher('/cartesian_impedance_example_controller/target_contact', Bool, queue_size=10)
-    rospy.Subscriber('/franka_state_controller/franka_states', FrankaState, franka_state_callback)
     rate = rospy.Rate(frequency)
 
-    # Wait until we have a valid current pose
-    while current_pose is None:
-        rospy.loginfo("Waiting for the current pose...")
-        rospy.sleep(0.1)
-
-    initial_pose = current_pose
+    initial_pose, _ = get_current_pose()
 
     start_pose = PoseStamped()
     start_pose.header = Header()
@@ -62,7 +32,7 @@ def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency):
 
     # Move to the circle starting point
     rospy.loginfo("Moving to the circle starting point...")
-    move_robot_from_A_to_B(start_pose, frequency, duration=5.0)
+    _ = move_robot_to_pose(copy.deepcopy(initial_pose), start_pose, duration=5.0)
 
     # Convert speed from mm/s to m/s
     speed_m_s = speed_mm_s / 1000.0
@@ -98,7 +68,7 @@ def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency):
 
     # Move back to the initial position
     rospy.loginfo("Returning to the initial position...")
-    move_robot_from_A_to_B(initial_pose, frequency, duration=5.0)
+    _ = move_robot_to_pose(start_pose, initial_pose, duration=5.0)
 
 if __name__ == '__main__':
     try:
