@@ -15,6 +15,8 @@ class ForcePlotter:
         rospy.Subscriber("/franka_state_controller/F_ext", WrenchStamped, self.callback)
 
         self.fig, self.ax = plt.subplots()
+        self.fig.canvas.manager.set_window_title("End effector's z axis force Plotter")
+
         self.line, = self.ax.plot([], [], 'r-')
         self.ax.set_xlim(0, 10)
         self.ax.set_ylim(-8, 2)

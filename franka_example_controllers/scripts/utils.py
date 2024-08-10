@@ -16,7 +16,7 @@ def quaternion_from_matrix(matrix):
     q = q / np.linalg.norm(q)
     return q
 
-def slerp(q0, q1, t):
+def slerp(q0, q1, t, threshold=0.1):
     """Spherical Linear Interpolation between two quaternions."""
     q0 = q0 / np.linalg.norm(q0)
     q1 = q1 / np.linalg.norm(q1)
@@ -39,6 +39,11 @@ def slerp(q0, q1, t):
 
     result = q0 * np.cos(theta) + q2 * np.sin(theta)
     result /= np.linalg.norm(result)
+    
+    # Directly set the final quaternion if the interpolation is near completion
+    if t > 1.0 - threshold:
+        return q1
+    
     return result
 
 def arctan_interpolation(t, total_steps, scaling_factor=5):
@@ -49,40 +54,38 @@ def move_robot_to_pose(start_pose, end_pose, duration=1, frequency=10):
     contact_pub = rospy.Publisher('/cartesian_impedance_example_controller/target_contact', Bool, queue_size=10)
     rate = rospy.Rate(frequency)
 
-    intermediate_pose = start_pose
- 
+    desired_pose = copy.deepcopy(start_pose)
     steps = int(duration * frequency)
+
     for i in range(steps):
         alpha = float(i) / float(steps)
         # Position interpolation
-        intermediate_pose.pose.position.x = (1 - alpha) * start_pose.pose.position.x + alpha * end_pose.pose.position.x
-        intermediate_pose.pose.position.y = (1 - alpha) * start_pose.pose.position.y + alpha * end_pose.pose.position.y
-        intermediate_pose.pose.position.z = (1 - alpha) * start_pose.pose.position.z + alpha * end_pose.pose.position.z
+        desired_pose.pose.position.x = (1 - alpha) * start_pose.pose.position.x + alpha * end_pose.pose.position.x
+        desired_pose.pose.position.y = (1 - alpha) * start_pose.pose.position.y + alpha * end_pose.pose.position.y
+        desired_pose.pose.position.z = (1 - alpha) * start_pose.pose.position.z + alpha * end_pose.pose.position.z
 
         # Quaternion (Orientation) interpolation
         start_quat = np.array([start_pose.pose.orientation.x, start_pose.pose.orientation.y, start_pose.pose.orientation.z, start_pose.pose.orientation.w])
         end_quat = np.array([end_pose.pose.orientation.x, end_pose.pose.orientation.y, end_pose.pose.orientation.z, end_pose.pose.orientation.w])
-        interp_quat = slerp(start_quat, end_quat, alpha)
+        desired_quat = slerp(start_quat, end_quat, alpha)
+        desired_quat /= np.linalg.norm(desired_quat)
 
-        # Normalize the interpolated quaternion
-        interp_quat /= np.linalg.norm(interp_quat)
-
-        # Set the orientation in the intermediate pose
-        intermediate_pose.pose.orientation.x = interp_quat[0]
-        intermediate_pose.pose.orientation.y = interp_quat[1]
-        intermediate_pose.pose.orientation.z = interp_quat[2]
-        intermediate_pose.pose.orientation.w = interp_quat[3]
+        desired_pose.pose.orientation.x = desired_quat[0]
+        desired_pose.pose.orientation.y = desired_quat[1]
+        desired_pose.pose.orientation.z = desired_quat[2]
+        desired_pose.pose.orientation.w = desired_quat[3]
 
         # Update timestamp and publish
-        intermediate_pose.header.stamp = rospy.Time.now()
-        pose_pub.publish(intermediate_pose)
+        desired_pose.header.stamp = rospy.Time.now()
+        pose_pub.publish(desired_pose)
         contact_pub.publish(False)
 
+        current_pose, _ = get_current_pose()
         rate.sleep()
 
     # Wait until the final pose is reached
     wait_until_reached(end_pose)
-    return intermediate_pose
+    return desired_pose
 
 def get_current_pose():
     msg = rospy.wait_for_message('/franka_state_controller/franka_states', FrankaState)
@@ -108,8 +111,7 @@ def get_current_pose():
     current_pose.pose.orientation.w = q[3]
 
     # determine_rotation(R)
-
-    return current_pose, R
+    return copy.deepcopy(current_pose), R
 
 def get_rotation_matrix(axis, angle):
     axis = np.asarray(axis)
@@ -142,8 +144,8 @@ def determine_rotation(R):
     print(f'Rotation: {np.degrees(theta)}° around the axis: {axis / np.linalg.norm(axis)}')
     print('......................................')
 
-def rotation_motion(start_pose, distance, angle, axis, frequency=10):
-    print(f'Performing a {angle} degrees rotation around {axis} axis')
+def rotation_motion(start_pose, position_vector_ee, angle_degrees, axis, frequency=10):
+    print(f'Performing a {angle_degrees} degrees rotation around {axis} axis')
 
     pose_pub = rospy.Publisher('/cartesian_impedance_example_controller/equilibrium_pose', PoseStamped, queue_size=100)
     contact_pub = rospy.Publisher('/cartesian_impedance_example_controller/target_contact', Bool, queue_size=100)
@@ -157,16 +159,15 @@ def rotation_motion(start_pose, distance, angle, axis, frequency=10):
     # Define the initial position in the plane
     _, R_in = get_current_pose()
     start_position = np.array([start_pose.pose.position.x, start_pose.pose.position.y, start_pose.pose.position.z])
-    position_vector_ee = np.array([0, 0, -distance])
     position_vector_base = np.dot(R_in, position_vector_ee)
     pivot_point = start_position - position_vector_base
 
     quat_in = np.array([start_pose.pose.orientation.x, start_pose.pose.orientation.y, start_pose.pose.orientation.z, start_pose.pose.orientation.w])
     axis_normalized = np.array(axis) / np.linalg.norm(axis)
     
-    num_steps = abs(angle)
+    num_steps = abs(angle_degrees)
     for step in range(num_steps + 1):
-        angle_step = (math.radians(angle) / num_steps) * step
+        angle_step = (math.radians(angle_degrees) / num_steps) * step
 
         quat_rotation = tf_trans.quaternion_about_axis(angle_step, axis_normalized)
         quat_out = tf_trans.quaternion_multiply(quat_rotation, quat_in)
@@ -236,7 +237,7 @@ def wait_until_reached(end_pose, position_tolerance=0.01, orientation_tolerance=
         t2 = time.time()
         delta_t = t2 - t1
         
-        if (position_difference < position_tolerance and orientation_difference < orientation_tolerance) or delta_t > 5:
+        if (position_difference < position_tolerance and orientation_difference < orientation_tolerance) or delta_t > 3:
             time.sleep(1)
             print("End effector has reached the target pose.")
             break
