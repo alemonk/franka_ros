@@ -2,14 +2,14 @@
 
 import rospy
 from geometry_msgs.msg import PoseStamped
-from std_msgs.msg import Header, Bool
-from franka_msgs.msg import FrankaState
+from std_msgs.msg import Bool
 import math
 import numpy as np
 import copy
 from utils import get_current_pose, move_robot_to_pose
+import time
 
-def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency=1000):
+def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency=100):
     rospy.init_node('circle_pose_publisher', anonymous=True)
     pose_pub = rospy.Publisher('/cartesian_impedance_example_controller/equilibrium_pose', PoseStamped, queue_size=100)
     contact_pub = rospy.Publisher('/cartesian_impedance_example_controller/target_contact', Bool, queue_size=100)
@@ -61,11 +61,11 @@ def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency=1
 if __name__ == '__main__':
     try:
         # Parameters for the circle
-        radius = 0.1  # Radius of the circle in meters
+        radius = 0.15  # Radius of the circle in meters
         center_x = 0.5  # X-coordinate of the circle center in meters
         center_y = 0.0  # Y-coordinate of the circle center in meters
         center_z = 0.0  # Z-coordinate of the circle center in meters
-        speed_mm_s = 10  # Desired linear speed in mm/s
+        speed_mm_s = 30  # Desired linear speed in mm/s
 
         publish_circle(radius, center_x, center_y, center_z, speed_mm_s)
     except rospy.ROSInterruptException:

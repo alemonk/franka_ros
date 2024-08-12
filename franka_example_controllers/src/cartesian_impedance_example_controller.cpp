@@ -197,15 +197,9 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   error.tail(3) << -transform.rotation() * error.tail(3);
 
   // Correctly transform the position adjustment from the end effector frame to the base frame
-  // if ((distance_error < 0.05) && target_contact_) {
   if (target_contact_) {
     Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
     position_d_ += rotation_matrix * position_adjustment_ee;
-
-    // ROS_INFO_STREAM("force_ee: "<<force_ee);
-    // ROS_INFO_STREAM("rotation_matrix: "<<rotation_matrix);
-    // ROS_INFO_STREAM("position_d_: "<<position_d_);
-    // ROS_INFO_STREAM("position: "<<position);
   }
 
   // Compute control
@@ -216,14 +210,14 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   Eigen::MatrixXd jacobian_transpose_pinv;
   pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
 
-  // Cartesian PD control with damping ratio = 1
-  tau_task << jacobian.transpose() *
-                  (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
+  // Cartesian PID control
+  tau_task << jacobian.transpose() * (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
+
   // Nullspace PD control with damping ratio = 1
-  tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
-                    jacobian.transpose() * jacobian_transpose_pinv) *
-                       (nullspace_stiffness_ * (q_d_nullspace_ - q) -
-                        (2.0 * sqrt(nullspace_stiffness_)) * dq);
+  tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) - 
+                    jacobian.transpose() * jacobian_transpose_pinv) * (nullspace_stiffness_ * (q_d_nullspace_ - q) -
+                    (2.0 * sqrt(nullspace_stiffness_)) * dq);
+
   // Desired torque
   tau_d << tau_task + tau_nullspace + coriolis;
   // Saturate torque rate to avoid discontinuities
@@ -235,14 +229,11 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
 
   // Update parameters changed online either through dynamic reconfigure or through the interactive
   // target by filtering
-  cartesian_stiffness_ =
-      filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * cartesian_stiffness_;
-  cartesian_damping_ =
-      filter_params_ * cartesian_damping_target_ + (1.0 - filter_params_) * cartesian_damping_;
-  nullspace_stiffness_ =
-      filter_params_ * nullspace_stiffness_target_ + (1.0 - filter_params_) * nullspace_stiffness_;
-  std::lock_guard<std::mutex> position_d_target_mutex_lock(
-      position_and_orientation_d_target_mutex_);
+  cartesian_stiffness_ = filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * cartesian_stiffness_;
+  cartesian_damping_ = filter_params_ * cartesian_damping_target_ + (1.0 - filter_params_) * cartesian_damping_;
+  nullspace_stiffness_ = filter_params_ * nullspace_stiffness_target_ + (1.0 - filter_params_) * nullspace_stiffness_;
+  
+  std::lock_guard<std::mutex> position_d_target_mutex_lock(position_and_orientation_d_target_mutex_);
   position_d_ = filter_params_ * position_d_target_ + (1.0 - filter_params_) * position_d_;
   orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
 }
