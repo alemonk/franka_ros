@@ -8,6 +8,7 @@ import numpy as np
 import copy
 from utils import get_current_pose, move_robot_to_pose
 import time
+import getpass
 
 def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency=100):
     rospy.init_node('circle_pose_publisher', anonymous=True)
@@ -36,6 +37,8 @@ def publish_circle(radius, center_x, center_y, center_z, speed_mm_s, frequency=1
 
     for _ in range(1):
         for i in range(points):
+            if i==round(points/2):
+                getpass.getpass("Press Enter to start...")
             # Calculate the angle for the current point
             angle = 2 * math.pi * i / points
             
@@ -67,6 +70,7 @@ if __name__ == '__main__':
         center_z = 0.0  # Z-coordinate of the circle center in meters
         speed_mm_s = 30  # Desired linear speed in mm/s
 
+        getpass.getpass("Press Enter to start...")
         publish_circle(radius, center_x, center_y, center_z, speed_mm_s)
     except rospy.ROSInterruptException:
         pass

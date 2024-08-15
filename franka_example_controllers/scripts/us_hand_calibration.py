@@ -13,11 +13,15 @@ if __name__ == '__main__':
         getpass.getpass("Press Enter to start...")
 
         current_pose, _ = get_current_pose()
-        initial_pose = copy.deepcopy(current_pose)
-        initial_pose.pose.position.x = 0.5
-        initial_pose.pose.position.z = 0.1
 
-        p = move_robot_to_pose(current_pose, initial_pose, duration=5)
+        # x axis
+        p = rotation_motion(current_pose, distance_from_axis, 30, [1, 0, 0])
+        p = linear_motion_z_axis(p, -0.01)
+        p = linear_motion_z_axis(p, 0.01)
+        p = rotation_motion(p, distance_from_axis, -60, [1, 0, 0])
+        p = linear_motion_z_axis(p, -0.01)
+        p = linear_motion_z_axis(p, 0.01)
+        p = rotation_motion(p, distance_from_axis, 30, [1, 0, 0])
 
         # y axis
         p = rotation_motion(p, distance_from_axis, 30, [0, 1, 0])
@@ -27,15 +31,6 @@ if __name__ == '__main__':
         p = linear_motion_z_axis(p, -0.01)
         p = linear_motion_z_axis(p, 0.01)
         p = rotation_motion(p, distance_from_axis, 30, [0, 1, 0])
-
-        # x axis
-        p = rotation_motion(p, distance_from_axis, 30, [1, 0, 0])
-        p = linear_motion_z_axis(p, -0.01)
-        p = linear_motion_z_axis(p, 0.01)
-        p = rotation_motion(p, distance_from_axis, -60, [1, 0, 0])
-        p = linear_motion_z_axis(p, -0.01)
-        p = linear_motion_z_axis(p, 0.01)
-        p = rotation_motion(p, distance_from_axis, 30, [1, 0, 0])
 
         # z axis
         p = rotation_motion(p, distance_from_axis, 30, [0, 0, 1])
