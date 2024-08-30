@@ -19,7 +19,7 @@ class ForcePlotter:
 
         self.line, = self.ax.plot([], [], 'r-')
         self.ax.set_xlim(0, 10)
-        self.ax.set_ylim(-8, 2)
+        self.ax.set_ylim(-5, 5)
         self.ax.set_xlabel('Time (s)')
         self.ax.set_ylabel('Force Z (N)')
 
