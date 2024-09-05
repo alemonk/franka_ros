@@ -19,7 +19,7 @@ class ForcePlotter:
 
         self.line, = self.ax.plot([], [], 'r-')
         self.ax.set_xlim(0, 10)
-        self.ax.set_ylim(-5, 5)
+        self.ax.set_ylim(-2, 8)
         self.ax.set_xlabel('Time (s)')
         self.ax.set_ylabel('Force Z (N)')
 
@@ -28,6 +28,7 @@ class ForcePlotter:
 
     def callback(self, msg):
         self.force_z = msg.wrench.force.z  # Z-axis force component
+        print(self.force_z)
 
     def init_plot(self):
         self.line.set_data([], [])

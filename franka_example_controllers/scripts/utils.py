@@ -8,7 +8,7 @@ from std_msgs.msg import Header, Bool
 import time
 import copy
 
-def move_robot_to_pose(start_pose, end_pose, duration=1, frequency=10):
+def move_robot_to_pose(start_pose, end_pose, duration=1, frequency=100):
     """
     Moves the robot's end-effector smoothly from a start pose to an end pose over a specified duration.
 

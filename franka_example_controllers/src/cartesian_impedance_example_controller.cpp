@@ -112,7 +112,7 @@ bool CartesianImpedanceExampleController::init(hardware_interface::RobotHW* robo
   cartesian_stiffness_.setZero();
   cartesian_damping_.setZero();
 
-  target_force_z_ = 3.0; // N
+  target_force_z_ = 2.0; // N
   target_contact_ = false;
 
   return true;
@@ -138,8 +138,8 @@ void CartesianImpedanceExampleController::starting(const ros::Time& time) {
   force_integral_ = 0.0;
   last_update_time_ = time;
 
-  force_control_gain_p_ = 0.00003;
-  force_control_gain_i_ = 0.000003;
+  force_control_gain_p_ = 0.000003;
+  force_control_gain_i_ = 0.000005;
   // force_control_gain_p_ = 0.0;
   // force_control_gain_i_ = 0.0;
 
@@ -166,7 +166,7 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   Eigen::Matrix3d rotation_matrix = transform.linear();
 
   // Transform the force to the end effector frame
-  Eigen::Vector3d force_ee(Eigen::Vector3d(0.0, 0.0, -force_z_));
+  Eigen::Vector3d force_ee(Eigen::Vector3d(0.0, 0.0, force_z_));
   double force_err_z = target_force_z_ - force_ee.z();
   
   // Compute the time difference
@@ -199,7 +199,8 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   // Correctly transform the position adjustment from the end effector frame to the base frame
   if (target_contact_) {
     Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
-    position_d_ += rotation_matrix * position_adjustment_ee;
+    Eigen::Vector3d position_adjustment_base = rotation_matrix * position_adjustment_ee;
+    position_d_ += position_adjustment_base;
   }
 
   // Compute control
