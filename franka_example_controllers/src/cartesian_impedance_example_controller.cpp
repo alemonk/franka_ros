@@ -138,8 +138,8 @@ void CartesianImpedanceExampleController::starting(const ros::Time& time) {
   force_integral_ = 0.0;
   last_update_time_ = time;
 
-  force_control_gain_p_ = 0.000003;
-  force_control_gain_i_ = 0.000005;
+  force_control_gain_p_ = 0.000002;
+  force_control_gain_i_ = 0.000002;
   // force_control_gain_p_ = 0.0;
   // force_control_gain_i_ = 0.0;
 
@@ -198,9 +198,16 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
 
   // Correctly transform the position adjustment from the end effector frame to the base frame
   if (target_contact_) {
-    Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
-    Eigen::Vector3d position_adjustment_base = rotation_matrix * position_adjustment_ee;
-    position_d_ += position_adjustment_base;
+      // Saturate position_adjustment_z if abs value too high
+      float f_sat = 1.5e-5;
+      if (std::abs(position_adjustment_z) > f_sat) {
+          position_adjustment_z = (position_adjustment_z > 0) ? f_sat : -f_sat;
+      }
+      
+      // ROS_INFO_STREAM(position_adjustment_z);
+      Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
+      Eigen::Vector3d position_adjustment_base = rotation_matrix * position_adjustment_ee;
+      position_d_ += position_adjustment_base;
   }
 
   // Compute control
