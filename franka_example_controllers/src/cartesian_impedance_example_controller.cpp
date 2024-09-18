@@ -137,11 +137,11 @@ void CartesianImpedanceExampleController::starting(const ros::Time& time) {
   force_z_ = 0.0;
   force_integral_ = 0.0;
   last_update_time_ = time;
+  last_force_err_z_ = 0.0;
 
-  force_control_gain_p_ = 0.000002;
-  force_control_gain_i_ = 0.000002;
-  // force_control_gain_p_ = 0.0;
-  // force_control_gain_i_ = 0.0;
+  force_control_gain_p_ = 1e-7;
+  force_control_gain_i_ = 5e-7;
+  force_control_gain_d_ = 1e-7;
 
   // set nullspace equilibrium configuration to initial q
   q_d_nullspace_ = q_initial;
@@ -176,9 +176,14 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   // Update the integral of the force error
   force_integral_ += force_err_z * dt;
 
+  // Compute the derivative of the force error
+  double force_derivative_z = (last_force_err_z_ - force_err_z) / dt;
+  last_force_err_z_ = force_err_z;  // Update the previous force error
+
   // Compute the desired position adjustment using a PID controller
   double position_adjustment_z = force_control_gain_p_ * force_err_z + 
-                                 force_control_gain_i_ * force_integral_;
+                                 force_control_gain_i_ * force_integral_ +
+                                 force_control_gain_d_ * force_derivative_z;
 
   // Compute error to desired pose
   // Position error
@@ -199,10 +204,11 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   // Correctly transform the position adjustment from the end effector frame to the base frame
   if (target_contact_) {
       // Saturate position_adjustment_z if abs value too high
-      float f_sat = 1.5e-5;
-      if (std::abs(position_adjustment_z) > f_sat) {
-          position_adjustment_z = (position_adjustment_z > 0) ? f_sat : -f_sat;
-      }
+      // float f_sat = 2e-5;
+      // if (std::abs(position_adjustment_z) > f_sat) {
+      //   ROS_INFO_STREAM(position_adjustment_z);
+      //   position_adjustment_z = (position_adjustment_z > 0) ? f_sat : -f_sat;
+      // }
       
       // ROS_INFO_STREAM(position_adjustment_z);
       Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
