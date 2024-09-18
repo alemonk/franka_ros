@@ -112,7 +112,7 @@ bool CartesianImpedanceExampleController::init(hardware_interface::RobotHW* robo
   cartesian_stiffness_.setZero();
   cartesian_damping_.setZero();
 
-  target_force_z_ = 2.0; // N
+  target_force_z_ = 3.0; // N
   target_contact_ = false;
 
   return true;
@@ -139,9 +139,9 @@ void CartesianImpedanceExampleController::starting(const ros::Time& time) {
   last_update_time_ = time;
   last_force_err_z_ = 0.0;
 
-  force_control_gain_p_ = 1e-7;
-  force_control_gain_i_ = 5e-7;
-  force_control_gain_d_ = 1e-7;
+  force_control_gain_p_ = 1e-6;
+  force_control_gain_i_ = 0.0;
+  force_control_gain_d_ = 0.0;
 
   // set nullspace equilibrium configuration to initial q
   q_d_nullspace_ = q_initial;
@@ -185,6 +185,21 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
                                  force_control_gain_i_ * force_integral_ +
                                  force_control_gain_d_ * force_derivative_z;
 
+  // Correctly transform the position adjustment from the end effector frame to the base frame
+  if (target_contact_) {
+      // Saturate position_adjustment_z if abs value too high
+      // float f_sat = 2e-5;
+      // if (std::abs(position_adjustment_z) > f_sat) {
+      //   ROS_INFO_STREAM(position_adjustment_z);
+      //   position_adjustment_z = (position_adjustment_z > 0) ? f_sat : -f_sat;
+      // }
+      
+      // ROS_INFO_STREAM(position_adjustment_z);
+      Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
+      Eigen::Vector3d position_adjustment_base = rotation_matrix * position_adjustment_ee;
+      position_d_ += position_adjustment_base;
+  }
+
   // Compute error to desired pose
   // Position error
   Eigen::Matrix<double, 6, 1> error;
@@ -200,21 +215,6 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
   error.tail(3) << error_quaternion.x(), error_quaternion.y(), error_quaternion.z();
   // Transform to base frame
   error.tail(3) << -transform.rotation() * error.tail(3);
-
-  // Correctly transform the position adjustment from the end effector frame to the base frame
-  if (target_contact_) {
-      // Saturate position_adjustment_z if abs value too high
-      // float f_sat = 2e-5;
-      // if (std::abs(position_adjustment_z) > f_sat) {
-      //   ROS_INFO_STREAM(position_adjustment_z);
-      //   position_adjustment_z = (position_adjustment_z > 0) ? f_sat : -f_sat;
-      // }
-      
-      // ROS_INFO_STREAM(position_adjustment_z);
-      Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
-      Eigen::Vector3d position_adjustment_base = rotation_matrix * position_adjustment_ee;
-      position_d_ += position_adjustment_base;
-  }
 
   // Compute control
   // Allocate variables
