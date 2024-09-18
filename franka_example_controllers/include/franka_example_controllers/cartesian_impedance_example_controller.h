@@ -61,12 +61,14 @@ class CartesianImpedanceExampleController : public controller_interface::MultiIn
 
   // Hybrid controller
   ros::Time last_update_time_;
+  double last_force_err_z_;
   double previous_force_err_z_;
   double force_integral_;
   double target_force_z_;
   double force_z_;
   double force_control_gain_p_;
   double force_control_gain_i_;
+  double force_control_gain_d_;
   bool target_contact_;
 
   // Dynamic reconfigure
