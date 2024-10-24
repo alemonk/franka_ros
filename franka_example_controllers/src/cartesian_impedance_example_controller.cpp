@@ -30,7 +30,7 @@ bool CartesianImpedanceExampleController::init(hardware_interface::RobotHW* robo
       ros::TransportHints().reliable().tcpNoDelay());
 
   target_contact_subscriber_ = node_handle.subscribe(
-      "/cartesian_impedance_example_controller/target_contact", 10, &CartesianImpedanceExampleController::targetContactCallback, this,
+      "/contact_with_target", 10, &CartesianImpedanceExampleController::targetContactCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
 
   std::string arm_id;
@@ -141,7 +141,7 @@ void CartesianImpedanceExampleController::starting(const ros::Time& time) {
 
   force_control_gain_p_ = 1e-6;
   force_control_gain_i_ = 0.0;
-  force_control_gain_d_ = 0.0;
+  force_control_gain_d_ = 1e-7;
 
   // set nullspace equilibrium configuration to initial q
   q_d_nullspace_ = q_initial;
@@ -187,12 +187,7 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
 
   // Correctly transform the position adjustment from the end effector frame to the base frame
   if (target_contact_) {
-      // Saturate position_adjustment_z if abs value too high
-      // float f_sat = 2e-5;
-      // if (std::abs(position_adjustment_z) > f_sat) {
-      //   ROS_INFO_STREAM(position_adjustment_z);
-      //   position_adjustment_z = (position_adjustment_z > 0) ? f_sat : -f_sat;
-      // }
+      ROS_INFO_STREAM(position_adjustment_z);
       
       // ROS_INFO_STREAM(position_adjustment_z);
       Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
