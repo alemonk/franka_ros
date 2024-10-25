@@ -186,9 +186,7 @@ void CartesianImpedanceExampleController::update(const ros::Time& time,
                                  force_control_gain_d_ * force_derivative_z;
 
   // Correctly transform the position adjustment from the end effector frame to the base frame
-  if (target_contact_) {
-      ROS_INFO_STREAM(position_adjustment_z);
-      
+  if (target_contact_) {      
       // ROS_INFO_STREAM(position_adjustment_z);
       Eigen::Vector3d position_adjustment_ee(0.0, 0.0, position_adjustment_z);
       Eigen::Vector3d position_adjustment_base = rotation_matrix * position_adjustment_ee;
